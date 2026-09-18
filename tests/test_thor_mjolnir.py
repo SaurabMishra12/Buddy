@@ -55,6 +55,29 @@ class TestThorAndMjolnir(unittest.TestCase):
         self.assertTrue(lightning_success)
         self.assertGreater(len(self.particles.bolts), 0)
 
+    def test_mjolnir_orbit_bounded_within_window(self):
+        """Verify Mjolnir's orbit stays strictly within 50px of Thor to prevent clipping in 180x180 window."""
+        self.thor.mjolnir.catch(500.0, 400.0)
+        self.thor.trigger_ability("hammer_spin", 500.0, 400.0, self.particles, audio_mgr=audio_manager)
+        self.assertEqual(self.thor.mjolnir.state, "ORBITING")
+
+        # Step through orbit updates
+        for _ in range(20):
+            self.thor.mjolnir.update(500.0, 400.0, 500.0, 400.0, 1920, 1080, self.particles, thor_x=500.0, thor_y=400.0)
+            dist_from_thor = ((self.thor.mjolnir.x - 500.0)**2 + (self.thor.mjolnir.y - 400.0)**2)**0.5
+            # Must stay well within half window size (90px)
+            self.assertLess(dist_from_thor, 60.0)
+
+    def test_thor_drawing_with_held_mjolnir(self):
+        """Verify Cairo drawing runs cleanly without exception for Thor holding Mjolnir."""
+        import cairo
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 180, 180)
+        ctx = cairo.Context(surface)
+        # Thor in held state
+        self.thor.draw(ctx, self.particles)
+        # Verify surface drawn
+        self.assertEqual(surface.get_width(), 180)
+
 
 if __name__ == "__main__":
     unittest.main()

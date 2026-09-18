@@ -252,19 +252,7 @@ class OverlayWindow:
             self.screen, css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
         )
 
-        # Realize window to access low-level GDK/X11 window
-        self.window.realize()
-        self.gdk_window = self.window.get_window()
-
-        # override_redirect allows free travel anywhere on screen without WM borders
-        self.gdk_window.set_override_redirect(True)
-
-        # Set active input shape around character:
-        # Clicks within this 80x80 box interact with the pet (drag, double-click, right-click options)
-        # Everywhere else on desktop passes through 100% cleanly!
-        self.set_hitbox_mask(radius=42.0)
-
-        # Event masks
+        # Event masks registered before realize to ensure X11/Wayland backend includes them
         self.window.add_events(
             Gdk.EventMask.BUTTON_PRESS_MASK
             | Gdk.EventMask.BUTTON_RELEASE_MASK
@@ -272,6 +260,26 @@ class OverlayWindow:
             | Gdk.EventMask.POINTER_MOTION_MASK
             | Gdk.EventMask.SCROLL_MASK
         )
+
+        # Realize window to access low-level GDK/X11 window
+        self.window.realize()
+        self.gdk_window = self.window.get_window()
+
+        # override_redirect allows free travel anywhere on screen without WM borders
+        self.gdk_window.set_override_redirect(True)
+        self.gdk_window.set_events(
+            self.gdk_window.get_events()
+            | Gdk.EventMask.BUTTON_PRESS_MASK
+            | Gdk.EventMask.BUTTON_RELEASE_MASK
+            | Gdk.EventMask.BUTTON1_MOTION_MASK
+            | Gdk.EventMask.POINTER_MOTION_MASK
+            | Gdk.EventMask.SCROLL_MASK
+        )
+
+        # Set active input shape around character:
+        # Clicks within this 108x108 box interact with the pet (drag, double-click, right-click options)
+        # Everywhere else on desktop passes through 100% cleanly!
+        self.set_hitbox_mask(radius=54.0)
 
         def _on_destroy(widget):
             if Gtk.main_level() > 0:
@@ -290,7 +298,7 @@ class OverlayWindow:
 
         self.click_through = False
 
-    def set_hitbox_mask(self, radius: float = 42.0) -> None:
+    def set_hitbox_mask(self, radius: float = 54.0) -> None:
         """Sets active clickable input region around center, letting rest of screen pass clicks through."""
         if not self.gdk_window:
             return
@@ -312,7 +320,7 @@ class OverlayWindow:
             empty_region = cairo.Region()
             self.gdk_window.input_shape_combine_region(empty_region, 0, 0)
         else:
-            self.set_hitbox_mask(radius=42.0)
+            self.set_hitbox_mask(radius=54.0)
 
     def move_to(self, center_x: float, center_y: float) -> None:
         """Positions window so (HALF_SIZE, HALF_SIZE) aligns exactly with (center_x, center_y)."""

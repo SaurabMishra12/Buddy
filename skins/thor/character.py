@@ -1,4 +1,4 @@
-"""Thor character: vector rendering, flowing cape physics, and Mjolnir combat mechanics."""
+"""Thor character: vector rendering, flowing cape physics, and realistic Mjolnir combat mechanics."""
 
 import math
 import random
@@ -14,15 +14,15 @@ from core.particles import ParticleManager, CYAN_GLOW
 
 
 class ThorCharacter(BaseCharacter):
-    """Thor, God of Thunder — Desktop companion with Mjolnir and fractal lightning."""
+    """Thor, God of Thunder — Desktop companion with authentic Mjolnir and fractal lightning."""
 
     def __init__(self, x: float = 500.0, y: float = 400.0):
         super().__init__(x, y, skin_id="thor")
         self.can_fly = True
         self.cape = Cape(x, y)
-        self.mjolnir = Mjolnir(x + 14.0, y + 10.0)
+        self.mjolnir = Mjolnir(x + 12.5, y + 12.0)
         self.eyes_glow = 0.3
-        self.play_timer = time.time() + random.uniform(3.5, 7.0)
+        self.play_timer = time.time() + random.uniform(4.0, 8.0)
         self.thrown_time = 0.0
         self.is_summoning = False
         self.target_offset_x = -50.0
@@ -31,12 +31,16 @@ class ThorCharacter(BaseCharacter):
     def get_hand_pos(self) -> Tuple[float, float]:
         """Returns world coordinates of Thor's active right hand."""
         dir_mult = 1.0 if self.facing_right else -1.0
+        spd = math.hypot(self.vx, self.vy)
         if self.state == "SUMMONING":
             hx = self.x + dir_mult * 26.0
-            hy = self.y - 2.0
+            hy = self.y - 3.5
+        elif spd > 4.0:
+            hx = self.x + dir_mult * 22.0
+            hy = self.y - 2.5
         else:
-            hx = self.x + dir_mult * 14.0
-            hy = self.y + 10.0
+            hx = self.x + dir_mult * 12.5
+            hy = self.y + 12.0
         return (hx, hy)
 
     def trigger_ability(
@@ -52,7 +56,7 @@ class ThorCharacter(BaseCharacter):
             if self.mjolnir.state == "HELD":
                 self.mjolnir.throw(hand_x, hand_y, target_x, target_y, mode="boomerang")
                 self.thrown_time = time.time()
-                particle_mgr.burst_sparks(hand_x, hand_y, count=12)
+                particle_mgr.burst_sparks(hand_x, hand_y, count=16, color=CYAN_GLOW)
                 audio_mgr.play("lightning")
                 return True
         elif ability_name == "lightning_summon":
@@ -63,7 +67,7 @@ class ThorCharacter(BaseCharacter):
             if self.mjolnir.state == "HELD":
                 self.mjolnir.throw(hand_x, hand_y, target_x, target_y, mode="orbit")
                 self.thrown_time = time.time()
-                particle_mgr.shockwave(hand_x, hand_y, max_radius=70.0)
+                particle_mgr.shockwave(self.x, self.y, max_radius=65.0)
                 audio_mgr.play("lightning")
                 return True
         return False
@@ -89,7 +93,7 @@ class ThorCharacter(BaseCharacter):
         else:
             self.facing_right = (cursor_x >= self.x)
 
-        # AI Behavior: Playful throwing & Summoning
+        # AI Behavior: Playful Mjolnir spin & Bounded Boomerang
         if self.mjolnir.state == "HELD":
             self.is_summoning = False
             if self.state == "SUMMONING":
@@ -97,28 +101,33 @@ class ThorCharacter(BaseCharacter):
 
             activity = config_data.get("activity_level", 1.0)
             if now >= self.play_timer and activity > 0.1:
-                mode = random.choice(["boomerang", "orbit", "boomerang"])
+                # Thor periodically executes an epic thunder orbit or a quick boomerang strike
+                mode = random.choice(["orbit", "orbit", "boomerang"])
                 if mode == "orbit":
-                    target_x = cursor_x
-                    target_y = cursor_y
+                    target_x = self.x
+                    target_y = self.y
                 else:
-                    target_x = cursor_x + random.uniform(-150, 150)
-                    target_y = cursor_y + random.uniform(-120, 120)
+                    # Bounded throw towards cursor (within 45px of Thor)
+                    dx = cursor_x - self.x
+                    dy = cursor_y - self.y
+                    dist = math.hypot(dx, dy) + 1e-4
+                    target_x = self.x + (dx / dist) * min(45.0, dist)
+                    target_y = self.y + (dy / dist) * min(35.0, dist)
 
                 self.mjolnir.throw(hand_x, hand_y, target_x, target_y, mode=mode)
                 self.thrown_time = now
-                self.play_timer = now + random.uniform(3.5, 7.0) / max(0.2, activity)
-                particle_mgr.burst_sparks(hand_x, hand_y, count=10)
+                self.play_timer = now + random.uniform(5.0, 9.0) / max(0.2, activity)
+                particle_mgr.burst_sparks(hand_x, hand_y, count=12, color=CYAN_GLOW)
                 audio_mgr.play("lightning")
-                if random.random() < 0.4:
-                    particle_mgr.sky_strike(hand_x, hand_y)
+                if random.random() < 0.35:
+                    particle_mgr.sky_strike(self.x, self.y)
 
         elif self.mjolnir.state in ("THROWN", "ORBITING"):
-            if now - self.thrown_time >= 2.0 and not self.is_summoning:
+            if now - self.thrown_time >= 1.4 and not self.is_summoning:
                 self.is_summoning = True
                 self.state = "SUMMONING"
                 self.mjolnir.summon()
-                particle_mgr.burst_sparks(hand_x, hand_y, count=14)
+                particle_mgr.burst_sparks(hand_x, hand_y, count=14, color=CYAN_GLOW)
                 audio_mgr.play("lightning")
 
         # Thor movement physics (chases cursor with smooth spring damping)
@@ -176,11 +185,11 @@ class ThorCharacter(BaseCharacter):
         self.eyes_glow += (target_glow - self.eyes_glow) * 0.15
 
         if self.state == "SUMMONING" and random.random() < 0.4:
-            particle_mgr.burst_sparks(hand_x, hand_y, count=2)
+            particle_mgr.burst_sparks(hand_x, hand_y, count=2, color=CYAN_GLOW)
         elif spd > 10.0 and random.random() < 0.2:
-            particle_mgr.burst_sparks(self.x, self.y, count=1)
+            particle_mgr.burst_sparks(self.x, self.y, count=1, color=CYAN_GLOW)
 
-        # Update Mjolnir
+        # Update Mjolnir (passing Thor coordinates for bounded orbit)
         catch_event = self.mjolnir.update(
             hand_x,
             hand_y,
@@ -188,17 +197,19 @@ class ThorCharacter(BaseCharacter):
             cursor_y,
             screen_w,
             screen_h,
-            particle_mgr
+            particle_mgr,
+            thor_x=self.x,
+            thor_y=self.y
         )
         if catch_event == "CAUGHT":
             self.is_summoning = False
             self.state = CharacterState.IDLE
-            self.play_timer = now + random.uniform(3.5, 7.0) / max(0.2, config_data.get("activity_level", 1.0))
+            self.play_timer = now + random.uniform(5.0, 9.0) / max(0.2, config_data.get("activity_level", 1.0))
 
     def draw(self, ctx: cairo.Context, particle_mgr: ParticleManager) -> None:
         ctx.save()
 
-        # 1. Cape behind Thor's body
+        # 1. Flowing Asgardian Cape behind Thor's body
         dir_mult = 1.0 if self.facing_right else -1.0
         self.cape.draw(ctx, self.x - 8 * dir_mult, self.x + 4 * dir_mult, self.y - 14)
 
@@ -239,7 +250,7 @@ class ThorCharacter(BaseCharacter):
         ctx.rectangle(-3, 10, 6, 6.5)
         ctx.fill()
 
-        # 6 Iconic Silver Discs
+        # 6 Iconic Silver Armor Discs
         ctx.set_source_rgb(0.82, 0.86, 0.92)
         disc_positions = [(-6, -3), (6, -3), (-6, 4), (6, 4), (-5, 9), (5, 9)]
         for dx, dy in disc_positions:
@@ -264,8 +275,12 @@ class ThorCharacter(BaseCharacter):
         ctx.rectangle(-15, 4, 5, 6)
         ctx.fill()
 
-        # Right Arm
-        if self.state == "SUMMONING":
+        # Right Arm & Mjolnir Grip
+        spd = math.hypot(self.vx, self.vy)
+        is_held = (self.mjolnir.state == "HELD")
+
+        if self.state == "SUMMONING" or (not is_held and self.mjolnir.state == "RETURNING"):
+            # Arm raised forward summoning thunder
             ctx.save()
             ctx.set_source_rgb(0.12, 0.14, 0.20)
             ctx.rectangle(8, -6, 16, 5)
@@ -273,32 +288,100 @@ class ThorCharacter(BaseCharacter):
             ctx.set_source_rgb(0.82, 0.86, 0.92)
             ctx.rectangle(15, -6, 7, 5)
             ctx.fill()
+
+            if is_held:
+                ctx.save()
+                ctx.translate(26, -3.5)
+                ctx.rotate(-0.25)
+                self.mjolnir.draw_held(ctx, ci=max(0.5, self.mjolnir.charged_intensity), anim_time=self.anim_time)
+                ctx.restore()
+
+            # Hand flesh
             ctx.set_source_rgb(0.94, 0.76, 0.62)
             ctx.arc(26, -3.5, 3.5, 0, 2 * math.pi)
             ctx.fill()
 
-            ctx.set_source_rgba(CYAN_GLOW[0], CYAN_GLOW[1], CYAN_GLOW[2], 0.9)
-            ctx.arc(26, -3.5, 6.0, 0, 2 * math.pi)
+            # Crackling energy around palm
+            ctx.set_source_rgba(CYAN_GLOW[0], CYAN_GLOW[1], CYAN_GLOW[2], 0.85)
+            ctx.arc(26, -3.5, 6.5, 0, 2 * math.pi)
             ctx.set_line_width(1.5)
             ctx.stroke()
             ctx.restore()
+
+        elif not is_held:
+            # Arm outstretched directing flying Mjolnir
+            ctx.save()
+            ctx.set_source_rgb(0.12, 0.14, 0.20)
+            ctx.rectangle(8, -5, 14, 5)
+            ctx.fill()
+            ctx.set_source_rgb(0.82, 0.86, 0.92)
+            ctx.rectangle(14, -5, 6, 5)
+            ctx.fill()
+
+            # Open palm controlling hammer
+            ctx.set_source_rgb(0.94, 0.76, 0.62)
+            ctx.arc(22, -2.5, 3.2, 0, 2 * math.pi)
+            ctx.fill()
+
+            # Glowing palm aura
+            ctx.set_source_rgba(CYAN_GLOW[0], CYAN_GLOW[1], CYAN_GLOW[2], 0.75)
+            ctx.arc(22, -2.5, 5.0, 0, 2 * math.pi)
+            ctx.set_line_width(1.2)
+            ctx.stroke()
+            ctx.restore()
+
+        elif spd > 4.0:
+            # Flying through the air: Mjolnir extended forward, pulling Thor!
+            ctx.save()
+            ctx.set_source_rgb(0.12, 0.14, 0.20)
+            ctx.rectangle(8, -5, 14, 5)
+            ctx.fill()
+            ctx.set_source_rgb(0.82, 0.86, 0.92)
+            ctx.rectangle(14, -5, 6, 5)
+            ctx.fill()
+
+            # Mjolnir held forward in flight
+            ctx.save()
+            ctx.translate(22, -2.5)
+            ctx.rotate(1.25)
+            self.mjolnir.draw_held(ctx, ci=max(0.35, self.mjolnir.charged_intensity), anim_time=self.anim_time)
+            ctx.restore()
+
+            # Fist flesh wrapped around handle
+            ctx.set_source_rgb(0.94, 0.76, 0.62)
+            ctx.arc(22, -2.5, 3.4, 0, 2 * math.pi)
+            ctx.fill()
+            ctx.restore()
+
         else:
+            # Idle / Walking: Arm hanging naturally with Mjolnir held firmly by his side
+            ctx.save()
             ctx.set_source_rgb(0.12, 0.14, 0.20)
             ctx.rectangle(10, -6, 5, 16)
             ctx.fill()
             ctx.set_source_rgb(0.82, 0.86, 0.92)
             ctx.rectangle(10, 4, 5, 6)
             ctx.fill()
+
+            # Mjolnir held at side, head resting angled upright
+            ctx.save()
+            ctx.translate(12.5, 12)
+            ctx.rotate(-0.35)
+            self.mjolnir.draw_held(ctx, ci=self.mjolnir.charged_intensity, anim_time=self.anim_time)
+            ctx.restore()
+
+            # Fist flesh wrapped over handle grip
             ctx.set_source_rgb(0.94, 0.76, 0.62)
             ctx.arc(12.5, 12, 3.2, 0, 2 * math.pi)
             ctx.fill()
+            ctx.restore()
 
         # Head & Golden Blond Hair
         ctx.set_source_rgb(0.92, 0.78, 0.25)
         ctx.arc(0, -14, 11, 0, 2 * math.pi)
         ctx.fill()
 
-        # Face & Beard
+        # Face & Norse Beard
         ctx.set_source_rgb(0.94, 0.76, 0.62)
         ctx.rectangle(-7, -18, 14, 11)
         ctx.fill()
@@ -359,8 +442,9 @@ class ThorCharacter(BaseCharacter):
 
         ctx.restore()
 
-        # 3. Mjolnir
+        # 3. Airborne Mjolnir (Orbiting / Thrown / Returning)
         self.mjolnir.draw(ctx)
+
         ctx.restore()
 
 

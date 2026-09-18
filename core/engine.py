@@ -393,7 +393,7 @@ class BuddyEngine:
     def on_button_press(self, widget: Gtk.Widget, event: Gdk.EventButton) -> bool:
         """Handle mouse click on pet."""
         click_dist = math.hypot(event.x - self.window.half_size, event.y - self.window.half_size)
-        if click_dist > 45.0:
+        if click_dist > 54.0:
             return False
 
         # 1. Double-click: signature ability move & spin
@@ -427,6 +427,9 @@ class BuddyEngine:
                 self.audio.play("bark")
             elif self.character.skin_id == "superman":
                 self.audio.play("jet")
+            elif self.character.skin_id == "thor":
+                self.audio.play("lightning")
+                self.particles.burst_sparks(self.character.x, self.character.y, count=14, color=CYAN_GLOW)
             else:
                 self.audio.play("magic")
 

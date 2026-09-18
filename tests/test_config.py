@@ -18,7 +18,7 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(self.config.get("skin"), "thor")
         self.assertEqual(self.config.get("fps"), 60)
         self.assertEqual(self.config.get("scale"), 1.0)
-        self.assertTrue(self.config.get("click_through"))
+        self.assertFalse(self.config.get("click_through"))
 
     def test_set_and_save(self):
         self.config.set("skin", "dragon")

@@ -106,7 +106,7 @@ class SettingsDialog(Gtk.Dialog):
         tab_disp.set_margin_right(12)
 
         self.click_chk = Gtk.CheckButton(label="100% Click-Through Overlay (Clicks pass through to desktop)")
-        self.click_chk.set_active(self.config.get("click_through", True))
+        self.click_chk.set_active(self.config.get("click_through", False))
         tab_disp.pack_start(self.click_chk, False, False, 0)
 
         # Monitor Area
@@ -177,7 +177,7 @@ class SettingsDialog(Gtk.Dialog):
 
         # Apply to live engine
         self.engine.character.scale = self.config.get("scale", 1.0)
-        self.engine.click_through = self.config.get("click_through", True)
+        self.engine.click_through = self.config.get("click_through", False)
         self.engine.window.set_click_through(self.engine.click_through)
         self.engine.audio.enabled = self.config.get("sound_enabled", True)
         self.engine.audio.volume = self.config.get("sound_volume", 0.7)

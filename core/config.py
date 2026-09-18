@@ -18,7 +18,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "activity_level": 1.0,
     "sound_enabled": True,
     "sound_volume": 0.7,
-    "click_through": True,
+    "click_through": False,
     "cursor_follow": True,
     "particles_enabled": True,
     "particle_limit": 300,
