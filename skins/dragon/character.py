@@ -153,239 +153,403 @@ class DragonCharacter(BaseCharacter):
 
     def draw(self, ctx: cairo.Context, particle_mgr: ParticleManager) -> None:
         ctx.save()
-        ctx.translate(self.x, self.y)
+        # Floating hover bobbing in flight
+        hover_y = math.sin(self.anim_time * 3.0) * 3.5 if self.state in (CharacterState.FLY, CharacterState.HOVER) else 0.0
+        ctx.translate(self.x, self.y + hover_y)
         ctx.rotate(self.tilt)
         ctx.scale(self.scale, self.scale)
         if not self.facing_right:
             ctx.scale(-1.0, 1.0)
 
-        # 1. Back Wing (Behind Body)
+        # -------------------------------------------------------------
+        # 1. Back Wing (Behind Body, with translucent membrane & skeletal struts)
+        # -------------------------------------------------------------
         ctx.save()
-        ctx.translate(-4, -10)
-        ctx.rotate(-self.wing_angle - 0.2)
-        # Membrane gradient
-        pat_bw = cairo.LinearGradient(0, 0, 10, -30)
-        pat_bw.add_color_stop_rgb(0.0, 0.45, 0.08, 0.10)
-        pat_bw.add_color_stop_rgb(0.7, 0.35, 0.06, 0.08)
-        pat_bw.add_color_stop_rgb(1.0, 0.22, 0.04, 0.05)
+        ctx.translate(-6, -8)
+        ctx.rotate(-self.wing_angle * 0.85 - 0.15)
+
+        # Translucent Back Wing Webbing (Subsurface amber-to-crimson scattering)
+        pat_bw = cairo.LinearGradient(0, 0, 12, -38)
+        pat_bw.add_color_stop_rgba(0.0, 0.48, 0.08, 0.10, 0.85)
+        pat_bw.add_color_stop_rgba(0.4, 0.65, 0.18, 0.12, 0.88)
+        pat_bw.add_color_stop_rgba(0.8, 0.85, 0.35, 0.15, 0.90)
+        pat_bw.add_color_stop_rgba(1.0, 0.30, 0.05, 0.06, 0.85)
         ctx.set_source(pat_bw)
+
         ctx.new_path()
         ctx.move_to(0, 0)
-        ctx.curve_to(-16, -26, -2, -34, 18, -26)
-        ctx.line_to(12, -14)
+        ctx.curve_to(-18, -28, -6, -42, 16, -34)
+        ctx.curve_to(26, -26, 22, -16, 14, -6)
         ctx.close_path()
         ctx.fill()
-        # Back wing bone
-        ctx.set_source_rgb(0.35, 0.06, 0.08)
-        ctx.set_line_width(2.0)
+
+        # Back Wing Veins & Skeletal Struts
+        ctx.set_source_rgba(0.28, 0.04, 0.06, 0.9)
+        ctx.set_line_width(2.2)
+        ctx.new_path()
         ctx.move_to(0, 0)
-        ctx.line_to(-2, -34)
+        ctx.curve_to(-6, -22, -4, -36, 16, -34)
+        ctx.stroke()
+        # Secondary struts
+        ctx.set_line_width(1.2)
+        ctx.move_to(0, -16)
+        ctx.line_to(18, -24)
+        ctx.move_to(0, -10)
+        ctx.line_to(14, -12)
         ctx.stroke()
         ctx.restore()
 
-        # 2. Serpentine Tail with Dorsal Spines and Barbed Spade
+        # -------------------------------------------------------------
+        # 2. Serpentine Muscular Tail with Dorsal Spines & Barbed Spade
+        # -------------------------------------------------------------
         ctx.save()
-        # Tail curve
-        tail_pat = cairo.LinearGradient(0, 6, -38, -6)
-        tail_pat.add_color_stop_rgb(0.0, 0.70, 0.14, 0.16)
-        tail_pat.add_color_stop_rgb(1.0, 0.45, 0.08, 0.10)
+        tail_wave = math.sin(self.anim_time * 4.0) * 4.0
+        tail_pat = cairo.LinearGradient(0, 8, -42, -4 + tail_wave)
+        tail_pat.add_color_stop_rgb(0.0, 0.72, 0.13, 0.15)
+        tail_pat.add_color_stop_rgb(0.5, 0.52, 0.09, 0.11)
+        tail_pat.add_color_stop_rgb(1.0, 0.32, 0.05, 0.07)
         ctx.set_source(tail_pat)
-        ctx.set_line_width(6.5)
+        ctx.set_line_width(8.0)
         ctx.set_line_cap(cairo.LINE_CAP_ROUND)
         ctx.new_path()
         ctx.move_to(-12, 6)
-        ctx.curve_to(-24, 10, -32, 2, -38, -6)
+        ctx.curve_to(-24, 12, -34, 4 + tail_wave * 0.5, -42, -4 + tail_wave)
         ctx.stroke()
 
-        # Tail spines
-        ctx.set_source_rgb(0.25, 0.22, 0.24)
-        for t_x, t_y in [(-18, 9), (-26, 7), (-33, 0)]:
+        # Tail Dorsal Spine Crests
+        ctx.set_source_rgb(0.22, 0.18, 0.22)
+        for t_x, t_y in [(-18, 9), (-26, 8), (-34, 2 + tail_wave * 0.4), (-40, -2 + tail_wave * 0.8)]:
             ctx.new_path()
             ctx.move_to(t_x, t_y)
-            ctx.line_to(t_x - 3, t_y - 5)
-            ctx.line_to(t_x + 2, t_y - 1)
+            ctx.line_to(t_x - 3, t_y - 7)
+            ctx.line_to(t_x + 3, t_y - 2)
             ctx.close_path()
             ctx.fill()
 
-        # Arrowhead Barbed Tail Spade
-        ctx.translate(-38, -6)
-        ctx.rotate(-0.4)
-        ctx.set_source_rgb(0.20, 0.18, 0.20)
+        # Sharp Barbed Obsidian Tail Spade
+        ctx.save()
+        ctx.translate(-42, -4 + tail_wave)
+        ctx.rotate(-0.35 + tail_wave * 0.04)
+        spade_pat = cairo.LinearGradient(-12, 0, 4, 0)
+        spade_pat.add_color_stop_rgb(0.0, 0.12, 0.12, 0.15)
+        spade_pat.add_color_stop_rgb(0.5, 0.35, 0.15, 0.18)
+        spade_pat.add_color_stop_rgb(1.0, 0.15, 0.14, 0.16)
+        ctx.set_source(spade_pat)
         ctx.new_path()
-        ctx.move_to(0, -7)
-        ctx.line_to(-10, 0)
-        ctx.line_to(0, 7)
-        ctx.line_to(-3, 0)
+        ctx.move_to(2, -9)
+        ctx.curve_to(-6, -7, -14, -2, -18, 0)
+        ctx.curve_to(-14, 2, -6, 7, 2, 9)
+        ctx.line_to(-4, 0)
         ctx.close_path()
         ctx.fill()
+        # Central spine on spade
+        ctx.set_source_rgb(0.75, 0.25, 0.25)
+        ctx.set_line_width(1.2)
+        ctx.move_to(-16, 0)
+        ctx.line_to(0, 0)
+        ctx.stroke()
+        ctx.restore()
         ctx.restore()
 
-        # 3. Dragon Legs & Sharp Black Talons
-        for lx, ly in [(-6, 12), (6, 13)]:
+        # -------------------------------------------------------------
+        # 3. Muscular Drake Hind Limbs & Razor-Sharp Talons
+        # -------------------------------------------------------------
+        for lx, ly, leg_scale in [(-8, 10, 0.95), (6, 12, 1.05)]:
             ctx.save()
-            ctx.set_source_rgb(0.60, 0.12, 0.14)
-            ctx.rectangle(lx - 3, ly, 6, 8)
+            ctx.translate(lx, ly)
+            ctx.scale(leg_scale, leg_scale)
+
+            # Muscular Thigh with scale texture
+            thigh_pat = cairo.RadialGradient(0, 0, 1, 0, 0, 9)
+            thigh_pat.add_color_stop_rgb(0.0, 0.78, 0.16, 0.18)
+            thigh_pat.add_color_stop_rgb(0.7, 0.55, 0.10, 0.12)
+            thigh_pat.add_color_stop_rgb(1.0, 0.32, 0.06, 0.08)
+            ctx.set_source(thigh_pat)
+            ctx.new_path()
+            ctx.arc(0, 0, 7.5, 0, 2 * math.pi)
             ctx.fill()
-            # Talons
-            ctx.set_source_rgb(0.15, 0.15, 0.18)
-            for tox in [-2, 0, 2]:
+
+            # Lower leg / Hock
+            ctx.set_source_rgb(0.48, 0.09, 0.11)
+            ctx.new_path()
+            ctx.move_to(-2.5, 3)
+            ctx.line_to(2.5, 3)
+            ctx.line_to(3.5, 11)
+            ctx.line_to(-3.5, 11)
+            ctx.close_path()
+            ctx.fill()
+
+            # 3 Curved Black Obsidian Talons
+            ctx.set_source_rgb(0.12, 0.11, 0.14)
+            for tox in [-3.0, 0.0, 3.0]:
                 ctx.new_path()
-                ctx.move_to(lx + tox, ly + 8)
-                ctx.line_to(lx + tox + 2, ly + 11)
-                ctx.line_to(lx + tox - 1, ly + 11)
+                ctx.move_to(tox - 1.2, 11)
+                ctx.curve_to(tox, 13, tox + 2.5, 15, tox + 4.0, 16)
+                ctx.curve_to(tox + 1.8, 14.5, tox, 13, tox + 0.8, 11)
                 ctx.close_path()
                 ctx.fill()
+                # Specular talon highlight
+                ctx.set_source_rgba(1.0, 1.0, 1.0, 0.4)
+                ctx.set_line_width(0.7)
+                ctx.move_to(tox, 11.5)
+                ctx.line_to(tox + 2.5, 14.5)
+                ctx.stroke()
+                ctx.set_source_rgb(0.12, 0.11, 0.14)
             ctx.restore()
 
-        # 4. Sculpted Dragon Body
-        body_pat = cairo.RadialGradient(-2, 0, 2, 0, 4, 18)
-        body_pat.add_color_stop_rgb(0.0, 0.85, 0.22, 0.22)
-        body_pat.add_color_stop_rgb(0.6, 0.65, 0.14, 0.16)
-        body_pat.add_color_stop_rgb(1.0, 0.40, 0.08, 0.10)
+        # -------------------------------------------------------------
+        # 4. Muscular Sculpted Dragon Torso & Neck
+        # -------------------------------------------------------------
+        # Muscular Body Mass
+        body_pat = cairo.RadialGradient(-3, 2, 2, 0, 4, 22)
+        body_pat.add_color_stop_rgb(0.0, 0.90, 0.22, 0.22)
+        body_pat.add_color_stop_rgb(0.5, 0.68, 0.13, 0.15)
+        body_pat.add_color_stop_rgb(1.0, 0.35, 0.06, 0.08)
         ctx.set_source(body_pat)
         ctx.save()
-        ctx.translate(0, 4)
-        ctx.scale(1.4, 1.0)
-        ctx.arc(0, 0, 15, 0, 2 * math.pi)
+        ctx.translate(-1, 5)
+        ctx.scale(1.45, 1.05)
+        ctx.arc(0, 0, 16.5, 0, 2 * math.pi)
         ctx.fill()
         ctx.restore()
 
-        # Dorsal Spines along spine
-        ctx.set_source_rgb(0.25, 0.22, 0.25)
-        for sx, sy in [(-8, -4), (-2, -8), (4, -8), (10, -5)]:
+        # Arching Muscular Neck
+        neck_pat = cairo.LinearGradient(-2, 4, 14, -8)
+        neck_pat.add_color_stop_rgb(0.0, 0.65, 0.12, 0.14)
+        neck_pat.add_color_stop_rgb(0.6, 0.82, 0.18, 0.20)
+        neck_pat.add_color_stop_rgb(1.0, 0.50, 0.08, 0.10)
+        ctx.set_source(neck_pat)
+        ctx.new_path()
+        ctx.move_to(-2, 0)
+        ctx.curve_to(2, -8, 8, -14, 16, -10)
+        ctx.curve_to(14, -4, 10, 6, 4, 10)
+        ctx.close_path()
+        ctx.fill()
+
+        # Overlapping Diamond Scales Texture (Neck & Upper Flank)
+        ctx.set_source_rgba(1.0, 0.5, 0.3, 0.45)
+        ctx.set_line_width(0.9)
+        scale_coords = [(-6, 2), (-2, 0), (2, -2), (6, -4), (10, -6),
+                        (-4, 6), (0, 4), (4, 2), (8, 0),
+                        (-2, 9), (2, 7), (6, 5)]
+        for scx, scy in scale_coords:
             ctx.new_path()
-            ctx.move_to(sx - 2, sy)
-            ctx.line_to(sx, sy - 5)
-            ctx.line_to(sx + 3, sy)
+            ctx.move_to(scx, scy - 2)
+            ctx.line_to(scx + 2.5, scy)
+            ctx.line_to(scx, scy + 2)
+            ctx.line_to(scx - 2.5, scy)
+            ctx.close_path()
+            ctx.stroke()
+
+        # Dorsal Spines along the Neck and Spine
+        ctx.set_source_rgb(0.18, 0.16, 0.20)
+        for sx, sy, sh in [(-10, -2, 5), (-4, -6, 7), (2, -9, 8), (8, -13, 9), (13, -15, 7)]:
+            ctx.new_path()
+            ctx.move_to(sx - 2.5, sy)
+            ctx.line_to(sx, sy - sh)
+            ctx.line_to(sx + 3.0, sy + 1)
             ctx.close_path()
             ctx.fill()
+            # Ridge highlight
+            ctx.set_source_rgba(0.5, 0.45, 0.5, 0.6)
+            ctx.set_line_width(0.8)
+            ctx.move_to(sx - 1.5, sy)
+            ctx.line_to(sx, sy - sh)
+            ctx.stroke()
+            ctx.set_source_rgb(0.18, 0.16, 0.20)
 
-        # Golden Belly Plates / Scutes
-        belly_pat = cairo.LinearGradient(0, 4, 0, 14)
-        belly_pat.add_color_stop_rgb(0.0, 0.98, 0.82, 0.25)
-        belly_pat.add_color_stop_rgb(1.0, 0.80, 0.55, 0.12)
+        # Segmented Ventral Golden-Amber Belly Armor (Scutes)
+        belly_pat = cairo.LinearGradient(0, 3, 0, 16)
+        belly_pat.add_color_stop_rgb(0.0, 1.0, 0.88, 0.35)
+        belly_pat.add_color_stop_rgb(0.6, 0.90, 0.68, 0.18)
+        belly_pat.add_color_stop_rgb(1.0, 0.68, 0.42, 0.10)
         ctx.set_source(belly_pat)
         ctx.save()
-        ctx.translate(3, 8)
-        ctx.scale(1.1, 0.65)
-        ctx.arc(0, 0, 9.5, 0, 2 * math.pi)
+        ctx.translate(4, 8)
+        ctx.scale(1.15, 0.72)
+        ctx.arc(0, 0, 10.5, 0, 2 * math.pi)
         ctx.fill()
-        # Segment lines
-        ctx.set_source_rgba(0.5, 0.3, 0.05, 0.6)
-        ctx.set_line_width(1.0)
-        for sy in [-5, -1, 3, 6]:
-            ctx.move_to(-7, sy)
-            ctx.line_to(7, sy)
+        # Fine segment lines & plate seams
+        ctx.set_source_rgba(0.42, 0.22, 0.04, 0.75)
+        ctx.set_line_width(1.1)
+        for sy in [-6, -2, 2, 6]:
+            ctx.move_to(-8, sy)
+            ctx.curve_to(-3, sy + 1.2, 3, sy + 1.2, 8, sy)
             ctx.stroke()
         ctx.restore()
 
-        # 5. Front Wing (Large leathery bat-wing with bone struts)
+        # -------------------------------------------------------------
+        # 5. Grand Front Wing (Large Articulated Bat Wing with Translucent Membrane)
+        # -------------------------------------------------------------
         ctx.save()
-        ctx.translate(2, -6)
+        ctx.translate(1, -6)
         ctx.rotate(self.wing_angle)
-        # Wing membrane with dramatic red-to-amber lighting
-        pat_fw = cairo.LinearGradient(0, 0, 15, -34)
-        pat_fw.add_color_stop_rgb(0.0, 0.90, 0.35, 0.18)
-        pat_fw.add_color_stop_rgb(0.5, 0.75, 0.18, 0.12)
-        pat_fw.add_color_stop_rgb(1.0, 0.45, 0.08, 0.08)
+
+        # Translucent Wing Webbing with rich subsurface scattering
+        pat_fw = cairo.LinearGradient(0, 0, 24, -46)
+        pat_fw.add_color_stop_rgba(0.0, 0.96, 0.45, 0.20, 0.92)
+        pat_fw.add_color_stop_rgba(0.4, 0.82, 0.22, 0.15, 0.94)
+        pat_fw.add_color_stop_rgba(0.75, 0.60, 0.12, 0.12, 0.96)
+        pat_fw.add_color_stop_rgba(1.0, 0.32, 0.05, 0.07, 0.96)
         ctx.set_source(pat_fw)
+
+        # Scalloped aerodynamic wing contour
         ctx.new_path()
         ctx.move_to(0, 0)
-        ctx.curve_to(-12, -28, 4, -38, 28, -26)
-        ctx.curve_to(24, -20, 20, -14, 16, -8)
+        ctx.curve_to(-14, -32, 6, -48, 32, -32)
+        ctx.curve_to(30, -22, 26, -14, 20, -6)
+        ctx.curve_to(16, -2, 10, 0, 0, 0)
         ctx.close_path()
         ctx.fill()
 
-        # Skeletal Wing Bones and Struts
-        ctx.set_source_rgb(0.35, 0.06, 0.08)
-        ctx.set_line_width(2.4)
-        ctx.move_to(0, 0)
-        ctx.line_to(4, -38)
-        ctx.move_to(4, -38)
-        ctx.line_to(28, -26)
-        ctx.stroke()
-        # Secondary struts
-        ctx.set_line_width(1.4)
-        ctx.move_to(0, 0)
-        ctx.line_to(16, -30)
-        ctx.move_to(0, 0)
-        ctx.line_to(22, -18)
-        ctx.stroke()
-        # Wing joint thumb claw
-        ctx.set_source_rgb(0.20, 0.18, 0.20)
+        # Translucent Branching Capillary Veins in the Wing Webbing
+        ctx.set_source_rgba(1.0, 0.8, 0.4, 0.35)
+        ctx.set_line_width(0.8)
         ctx.new_path()
-        ctx.move_to(4, -38)
-        ctx.line_to(6, -42)
-        ctx.line_to(2, -40)
+        ctx.move_to(8, -26)
+        ctx.line_to(16, -34)
+        ctx.move_to(12, -20)
+        ctx.line_to(22, -26)
+        ctx.move_to(14, -14)
+        ctx.line_to(24, -18)
+        ctx.stroke()
+
+        # Skeletal Wing Arm Bones (Humerus, Radius/Ulna & Elongated Fingers)
+        ctx.set_source_rgb(0.38, 0.06, 0.08)
+        ctx.set_line_width(3.0)
+        ctx.new_path()
+        ctx.move_to(0, 0)
+        ctx.curve_to(2, -24, 4, -44, 8, -46)
+        ctx.stroke()
+
+        # Elongated Finger Struts
+        ctx.set_line_width(1.8)
+        ctx.new_path()
+        ctx.move_to(8, -46)
+        ctx.line_to(32, -32)
+        ctx.move_to(6, -38)
+        ctx.line_to(26, -20)
+        ctx.move_to(4, -28)
+        ctx.line_to(20, -10)
+        ctx.stroke()
+
+        # Hooked Thumb Claw (Alula) at Wing Apex
+        ctx.set_source_rgb(0.12, 0.10, 0.14)
+        ctx.new_path()
+        ctx.move_to(8, -46)
+        ctx.curve_to(11, -50, 9, -52, 6, -49)
         ctx.close_path()
         ctx.fill()
         ctx.restore()
 
-        # 6. Dragon Head, Jaws & Horns
+        # -------------------------------------------------------------
+        # 6. Predatory Drake Head, Curved Horns & Piercing Eyes
+        # -------------------------------------------------------------
         ctx.save()
-        head_pat = cairo.RadialGradient(14, -6, 2, 14, -6, 14)
-        head_pat.add_color_stop_rgb(0.0, 0.85, 0.22, 0.22)
-        head_pat.add_color_stop_rgb(0.8, 0.65, 0.14, 0.16)
-        head_pat.add_color_stop_rgb(1.0, 0.40, 0.08, 0.10)
+        # Head Base & Jaw Muscles
+        head_pat = cairo.RadialGradient(16, -7, 2, 16, -7, 16)
+        head_pat.add_color_stop_rgb(0.0, 0.92, 0.25, 0.22)
+        head_pat.add_color_stop_rgb(0.65, 0.70, 0.14, 0.16)
+        head_pat.add_color_stop_rgb(1.0, 0.38, 0.07, 0.09)
         ctx.set_source(head_pat)
-        ctx.arc(14, -6, 11.5, 0, 2 * math.pi)
+        ctx.new_path()
+        ctx.arc(16, -7, 12.5, 0, 2 * math.pi)
         ctx.fill()
 
-        # Snout / Jaws
+        # Chiseled Predatory Snout / Jaws
         ctx.new_path()
-        ctx.move_to(14, -10)
-        ctx.line_to(27, -9)
-        ctx.line_to(27, -2)
-        ctx.line_to(14, 1)
+        ctx.move_to(16, -12)
+        ctx.curve_to(24, -13, 30, -11, 33, -9)  # Upper snout bridge
+        ctx.line_to(33, -3)                      # Snout tip
+        ctx.curve_to(28, -2, 22, -1, 15, 2)      # Lower jaw contour
         ctx.close_path()
         ctx.fill()
 
-        # Sharp White Fangs
-        ctx.set_source_rgb(0.95, 0.95, 0.92)
-        for fx in [18, 22, 25]:
+        # Nostril Ridge with Glowing Smoke & Fire Embers
+        ctx.set_source_rgb(0.18, 0.04, 0.04)
+        ctx.arc(29, -8, 1.6, 0, 2 * math.pi)
+        ctx.fill()
+        # Glowing ember spark inside nostril
+        ctx.set_source_rgb(1.0, 0.6, 0.1)
+        ctx.arc(28.5, -8, 0.7, 0, 2 * math.pi)
+        ctx.fill()
+        if random.random() < 0.30:
+            particle_mgr.smoke_puff(self.x + (30 if self.facing_right else -30), self.y - 7 + hover_y, count=1)
+
+        # Internal Glowing Maw (if breathing fire or ready)
+        if self.is_breathing_fire or random.random() < 0.20:
+            ctx.set_source_rgba(1.0, 0.55, 0.1, 0.75)
             ctx.new_path()
-            ctx.move_to(fx, -2)
-            ctx.line_to(fx + 1.5, 2)
-            ctx.line_to(fx + 3, -2)
+            ctx.move_to(22, -4)
+            ctx.line_to(31, -5)
+            ctx.line_to(24, 0)
             ctx.close_path()
             ctx.fill()
 
-        # Swept-back Horns with Ridges
-        ctx.set_source_rgb(0.22, 0.22, 0.25)
+        # Razor-Sharp Ivory Fangs
+        ctx.set_source_rgb(0.98, 0.97, 0.92)
+        for fx, fy, fh in [(21, -3, 3.5), (25, -4, 4.0), (29, -5, 3.0), (32, -5, 2.5)]:
+            ctx.new_path()
+            ctx.move_to(fx - 1.0, fy)
+            ctx.line_to(fx + 0.5, fy + fh)
+            ctx.line_to(fx + 2.0, fy)
+            ctx.close_path()
+            ctx.fill()
+
+        # Dual Swept-back Horns with Growth Ridges & Obsidian Sheen
+        # Primary Curved Dragon Horn
+        ctx.set_source_rgb(0.16, 0.14, 0.18)
         ctx.new_path()
-        ctx.move_to(8, -14)
-        ctx.curve_to(6, -26, -3, -32, -10, -29)
-        ctx.curve_to(-5, -24, 2, -19, 12, -12)
+        ctx.move_to(11, -15)
+        ctx.curve_to(8, -28, -2, -37, -14, -33)
+        ctx.curve_to(-7, -27, 2, -21, 14, -13)
         ctx.close_path()
         ctx.fill()
 
-        # Horn ridge highlights
-        ctx.set_source_rgb(0.40, 0.40, 0.45)
-        ctx.set_line_width(1.0)
-        for h_step in [(4, -18), (1, -22), (-2, -26)]:
-            ctx.move_to(h_step[0] - 2, h_step[1])
-            ctx.line_to(h_step[0] + 2, h_step[1] + 2)
+        # Secondary Lower Cheek Horn
+        ctx.new_path()
+        ctx.move_to(13, -3)
+        ctx.curve_to(6, -7, -2, -8, -6, -6)
+        ctx.curve_to(1, -4, 7, -1, 14, 0)
+        ctx.close_path()
+        ctx.fill()
+
+        # Horn Growth Rings & Specular Highlights
+        ctx.set_source_rgba(0.55, 0.50, 0.58, 0.6)
+        ctx.set_line_width(1.1)
+        for h_step in [(6, -20), (2, -25), (-3, -29), (-8, -32)]:
+            ctx.move_to(h_step[0] - 2.5, h_step[1])
+            ctx.line_to(h_step[0] + 2.5, h_step[1] + 2.5)
             ctx.stroke()
 
-        # Glowing Amber Reptilian Eye
-        ctx.set_source_rgb(1.0, 0.85, 0.10)
-        ctx.arc(15, -9, 3.4, 0, 2 * math.pi)
-        ctx.fill()
-        # Vertical Slit Pupil
-        ctx.set_source_rgb(0.08, 0.04, 0.02)
-        ctx.rectangle(14.4, -11.5, 1.2, 5.0)
-        ctx.fill()
-        # Eye specular spark
-        ctx.set_source_rgb(1.0, 1.0, 1.0)
-        ctx.arc(14.0, -10.0, 0.8, 0, 2 * math.pi)
+        # Piercing Golden-Amber Reptilian Slit Eye with Glassy Cornea
+        # Eye Socket Shadow
+        ctx.set_source_rgb(0.25, 0.05, 0.06)
+        ctx.arc(17, -10, 4.8, 0, 2 * math.pi)
         ctx.fill()
 
-        # Nostril with glowing smoke wisp
-        ctx.set_source_rgb(0.2, 0.05, 0.05)
-        ctx.arc(24, -6.5, 1.2, 0, 2 * math.pi)
+        # Glowing Amber/Gold Iris
+        eye_iris = cairo.RadialGradient(17, -10, 0.5, 17, -10, 4.0)
+        eye_iris.add_color_stop_rgb(0.0, 1.0, 0.92, 0.25)
+        eye_iris.add_color_stop_rgb(0.7, 0.98, 0.72, 0.05)
+        eye_iris.add_color_stop_rgb(1.0, 0.75, 0.35, 0.02)
+        ctx.set_source(eye_iris)
+        ctx.arc(17, -10, 4.0, 0, 2 * math.pi)
         ctx.fill()
-        if random.random() < 0.35:
-            particle_mgr.smoke_puff(self.x + (26 if self.facing_right else -26), self.y - 6, count=1)
+
+        # Black Predatory Vertical Slit Pupil
+        ctx.set_source_rgb(0.04, 0.02, 0.02)
+        ctx.new_path()
+        ctx.move_to(17, -13.5)
+        ctx.curve_to(17.8, -10, 17.8, -10, 17, -6.5)
+        ctx.curve_to(16.2, -10, 16.2, -10, 17, -13.5)
+        ctx.close_path()
+        ctx.fill()
+
+        # Specular Cornea Catchlight
+        ctx.set_source_rgb(1.0, 1.0, 1.0)
+        ctx.arc(15.8, -11.2, 1.0, 0, 2 * math.pi)
+        ctx.fill()
 
         ctx.restore()
         ctx.restore()

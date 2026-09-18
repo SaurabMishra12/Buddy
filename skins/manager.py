@@ -50,7 +50,7 @@ class SkinManager:
             ("ironman", "Iron Man", "Armored hero with boot thrusters, repulsors, and air dash.", ["repulsor_blast", "flight", "air_dash"]),
             ("harry_potter", "Harry Potter", "Wizard casting spells, summoning spark trails, and flying a broom.", ["cast_spell", "broom_flight", "teleport"]),
             ("captain_america", "Captain America", "Super soldier throwing and bouncing his Vibranium Shield.", ["shield_throw", "shield_block", "hero_pose"]),
-            ("thanos", "Thanos", "Titan wielding the 6 Infinity Stones with cosmic energy bursts.", ["time_stone", "space_teleport", "power_blast", "the_snap"]),
+            ("thanos", "Thanos", "Titan wielding the 6 Infinity Stones with cosmic energy bursts.", ["time_stone", "reality_warp", "space_teleport", "power_blast", "the_snap"]),
             ("batman", "Batman", "Dark Knight grappling, cape gliding, and throwing batarangs.", ["grapple", "cape_glide", "batarang", "perch"]),
             ("superman", "Superman", "Man of Steel flying at supersonic speed with laser heat vision.", ["heat_vision", "supersonic_flight", "super_jump"])
         ]

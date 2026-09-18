@@ -304,39 +304,55 @@ class BuddyEngine:
                 dist = math.hypot(dx, dy)
 
                 if skin in ("superman", "thor", "ironman", "dragon", "harry_potter", "thanos"):
-                    # FLYERS: Smooth flight towards mouse destination
-                    if dist > 14.0:
+                    # FLYERS: Critically damped spring-damper flight towards mouse destination
+                    if dist > 12.0:
                         self.character.facing_right = (dx >= 0.0)
                         self.character.state = CharacterState.FLY
-                        follow_spd = min(16.0, max(3.5, dist * 0.09))
-                        self.character.vx = (dx / dist) * follow_spd
-                        self.character.vy = (dy / dist) * follow_spd
+                        follow_spd = min(15.0, max(2.5, dist * 0.085))
+                        target_vx = (dx / dist) * follow_spd
+                        target_vy = (dy / dist) * follow_spd
+
+                        # Critically damped spring-damper velocity easing (fluid & smooth)
+                        self.character.vx += (target_vx - self.character.vx) * 0.22
+                        self.character.vy += (target_vy - self.character.vy) * 0.22
                         self.character.x += self.character.vx
                         self.character.y += self.character.vy
 
-                        # Hero-specific flight effects
+                        # Hero-specific banking tilt and flight propulsion trails
                         if skin == "ironman":
-                            self.character.tilt = (self.character.vx / 16.0) * 0.28
+                            target_tilt = (self.character.vx / 15.0) * 0.28
+                            self.character.tilt += (target_tilt - self.character.tilt) * 0.16
                             self.particles.burst_sparks(self.character.x, self.character.y + 16, count=2, color=(1.0, 0.5, 0.1))
                             self.particles.burst_sparks(self.character.x - (8 if self.character.facing_right else -8), self.character.y + 18, count=1, color=CYAN_GLOW)
                         elif skin == "superman":
-                            self.character.tilt = (self.character.vx / 16.0) * 0.22
+                            target_tilt = (self.character.vx / 15.0) * 0.24
+                            self.character.tilt += (target_tilt - self.character.tilt) * 0.18
                             self.particles.burst_sparks(self.character.x - (12 if self.character.facing_right else -12), self.character.y + 8, count=1, color=(1.0, 0.2, 0.2))
                             self.particles.burst_sparks(self.character.x, self.character.y + 12, count=1, color=(0.2, 0.4, 0.9))
                         elif skin == "thor":
+                            target_tilt = (self.character.vx / 15.0) * 0.18
+                            self.character.tilt += (target_tilt - self.character.tilt) * 0.15
                             self.particles.burst_sparks(self.character.x + (16 if self.character.facing_right else -16), self.character.y - 4, count=2, color=CYAN_GLOW)
                         elif skin == "dragon":
+                            target_tilt = (self.character.vx / 15.0) * 0.25
+                            self.character.tilt += (target_tilt - self.character.tilt) * 0.16
                             if random.random() < 0.35:
                                 self.particles.flame_puff(self.character.x, self.character.y + 10, count=1, size=4.0)
                         elif skin == "harry_potter":
+                            target_tilt = (self.character.vx / 15.0) * 0.20
+                            self.character.tilt += (target_tilt - self.character.tilt) * 0.15
                             self.particles.burst_sparks(self.character.x - (12 if self.character.facing_right else -12), self.character.y + 8, count=2, color=(1.0, 0.85, 0.2))
                         elif skin == "thanos":
+                            target_tilt = (self.character.vx / 15.0) * 0.16
+                            self.character.tilt += (target_tilt - self.character.tilt) * 0.14
                             self.particles.burst_sparks(self.character.x, self.character.y + 16, count=2, color=(0.7, 0.1, 0.9))
                     else:
                         self.character.state = CharacterState.HOVER
-                        self.character.vx *= 0.70
-                        self.character.vy *= 0.70
-                        self.character.tilt *= 0.80
+                        self.character.vx *= 0.82
+                        self.character.vy *= 0.82
+                        self.character.tilt *= 0.82
+                        self.character.x += self.character.vx
+                        self.character.y += self.character.vy
 
                 elif skin == "hulk":
                     # HULK: Traverses by Parabolic Super Leaps ("hulk should jump")
@@ -358,11 +374,13 @@ class BuddyEngine:
                             self.audio.play("smash")
                         else:
                             self.character.state = CharacterState.IDLE
-                            self.character.vx *= 0.70
+                            self.character.vx *= 0.82
+                            self.character.x += self.character.vx
                     else:
                         # Airborne parabolic trajectory with Titan gravity
-                        self.character.vy += 0.95
-                        self.character.vx += (1.0 if dx > 0 else -1.0) * 0.25
+                        self.character.vy += 0.92
+                        target_air_vx = (1.0 if dx > 0 else -1.0) * min(15.0, max(2.5, abs(dx) * 0.08))
+                        self.character.vx += (target_air_vx - self.character.vx) * 0.12
                         self.character.vx = max(-16.0, min(16.0, self.character.vx))
                         self.character.x += self.character.vx
                         self.character.y += self.character.vy
@@ -378,20 +396,23 @@ class BuddyEngine:
 
                 else:
                     # RUNNERS (Captain America, Cat, Dog, Batman):
-                    # Sprint rapidly along ground towards destination
+                    # Fluid sprint with spring-damper stride along ground
                     dist_x = abs(dx)
                     self.character.facing_right = (dx >= 0.0)
 
-                    if dist_x > 20.0:
+                    if dist_x > 18.0:
                         self.character.state = CharacterState.RUN
-                        run_spd = min(14.0, max(3.0, dist_x * 0.10))
-                        self.character.vx = (1.0 if dx > 0 else -1.0) * run_spd
+                        run_spd = min(13.0, max(2.5, dist_x * 0.095))
+                        target_vx = (1.0 if dx > 0 else -1.0) * run_spd
+                        # Smooth acceleration stride
+                        self.character.vx += (target_vx - self.character.vx) * 0.24
                         self.character.x += self.character.vx
                         if random.random() < 0.25:
                             self.particles.smoke_puff(self.character.x, ground_y + 20, count=1)
                     else:
                         self.character.state = CharacterState.IDLE
-                        self.character.vx *= 0.70
+                        self.character.vx *= 0.80
+                        self.character.x += self.character.vx
 
                     # If mouse is pulled high into the air, runner can jump / reach up!
                     if target_y < ground_y - 60.0:

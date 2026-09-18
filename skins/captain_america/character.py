@@ -20,6 +20,8 @@ class CaptainAmericaCharacter(BaseCharacter):
         self.shield = VibraniumShield(x - 12.0, y + 2.0)
         self.is_blocking = False
         self.block_end = 0.0
+        self.is_hero_posing = False
+        self.hero_pose_end = 0.0
         self.action_timer = time.time() + random.uniform(4.0, 8.0)
         self.hitbox_radius = 46.0
 
@@ -66,10 +68,15 @@ class CaptainAmericaCharacter(BaseCharacter):
             particle_mgr.shockwave(hand_x, hand_y, max_radius=45.0, color=(0.4, 0.6, 1.0))
             audio_mgr.play("smash")
             return True
-        elif ability_name == "hero_pose":
+        elif ability_name in ("hero_pose", "victory", "pose", "salute"):
+            self.is_hero_posing = True
+            self.hero_pose_end = time.time() + 2.5
             self.state = CharacterState.VICTORY
-            self.state_timer = time.time() + 1.5
-            particle_mgr.burst_sparks(self.x, self.y - 15, count=10, color=(1.0, 0.85, 0.2))
+            self.vx = 0.0
+            particle_mgr.shockwave(self.x, self.y, max_radius=65.0, color=(0.95, 0.85, 0.25), line_width=3.5)
+            particle_mgr.burst_sparks(self.x, self.y - 14, count=25, color=(1.0, 0.90, 0.3), size=3.2)
+            particle_mgr.burst_sparks(self.x, self.y - 14, count=15, color=(0.2, 0.5, 1.0), size=2.5)
+            audio_mgr.play("smash")
             return True
         return False
 
@@ -95,16 +102,23 @@ class CaptainAmericaCharacter(BaseCharacter):
         if self.is_blocking and now >= self.block_end:
             self.is_blocking = False
 
-        if self.state == CharacterState.VICTORY and now >= self.state_timer:
-            self.state = CharacterState.IDLE
+        if self.is_hero_posing:
+            if now >= self.hero_pose_end:
+                self.is_hero_posing = False
+                self.state = CharacterState.IDLE
+            else:
+                self.state = CharacterState.VICTORY
+                self.vx *= 0.60
+                if random.random() < 0.25:
+                    particle_mgr.burst_sparks(self.x, self.y - 6, count=1, color=(1.0, 0.88, 0.3), size=2.0)
 
         # Random personality events
-        if now >= self.action_timer and activity > 0.1:
+        if now >= self.action_timer and activity > 0.1 and not self.is_hero_posing:
             self.action_timer = now + random.uniform(5.0, 9.0) / max(0.2, activity)
             roll = random.random()
-            if roll < 0.50:
+            if roll < 0.45:
                 self.trigger_ability("shield_throw", cursor_x, cursor_y, particle_mgr, audio_mgr)
-            elif roll < 0.75:
+            elif roll < 0.70:
                 self.trigger_ability("shield_block", cursor_x, cursor_y, particle_mgr, audio_mgr)
             elif roll < 0.90:
                 self.trigger_ability("hero_pose", cursor_x, cursor_y, particle_mgr, audio_mgr)
@@ -118,7 +132,11 @@ class CaptainAmericaCharacter(BaseCharacter):
         dx = cursor_x - self.x
         dist_x = abs(dx)
 
-        if dist_x > 45.0:
+        if self.is_hero_posing:
+            # Stand firmly planted during Hero Pose
+            self.vx *= 0.50
+            self.state = CharacterState.VICTORY
+        elif dist_x > 45.0:
             self.vx += (1.0 if dx > 0 else -1.0) * min(dist_x * 0.08, accel)
             self.state = CharacterState.RUN
             # Dust puffs when sprinting
@@ -158,23 +176,39 @@ class CaptainAmericaCharacter(BaseCharacter):
         pat_pants.add_color_stop_rgb(0.0, 0.14, 0.25, 0.52)
         pat_pants.add_color_stop_rgb(1.0, 0.08, 0.15, 0.35)
 
-        # Left Leg
-        ctx.set_source(pat_pants)
-        ctx.rectangle(-7 - leg_stride * 0.5, 12, 5.5, 14)
-        ctx.fill()
-        # Right Leg
-        ctx.rectangle(2 + leg_stride * 0.5, 12, 5.5, 14)
-        ctx.fill()
+        if self.is_hero_posing:
+            # Heroic Wide Planted Stance
+            ctx.set_source(pat_pants)
+            ctx.rectangle(-10, 12, 5.5, 14)
+            ctx.rectangle(4.5, 12, 5.5, 14)
+            ctx.fill()
+            # Crimson Combat Boots with Tread
+            ctx.set_source_rgb(0.80, 0.12, 0.16)
+            ctx.rectangle(-11, 22, 6.5, 7)
+            ctx.rectangle(3.5, 22, 6.5, 7)
+            ctx.fill()
+            ctx.set_source_rgb(0.20, 0.05, 0.05)
+            ctx.rectangle(-11, 27, 6.5, 2)
+            ctx.rectangle(3.5, 27, 6.5, 2)
+            ctx.fill()
+        else:
+            # Left Leg
+            ctx.set_source(pat_pants)
+            ctx.rectangle(-7 - leg_stride * 0.5, 12, 5.5, 14)
+            ctx.fill()
+            # Right Leg
+            ctx.rectangle(2 + leg_stride * 0.5, 12, 5.5, 14)
+            ctx.fill()
 
-        # Crimson Combat Boots with Tread
-        ctx.set_source_rgb(0.80, 0.12, 0.16)
-        ctx.rectangle(-8 - leg_stride * 0.5, 22, 6.5, 7)
-        ctx.rectangle(1 + leg_stride * 0.5, 22, 6.5, 7)
-        ctx.fill()
-        ctx.set_source_rgb(0.20, 0.05, 0.05)
-        ctx.rectangle(-8 - leg_stride * 0.5, 27, 6.5, 2)
-        ctx.rectangle(1 + leg_stride * 0.5, 27, 6.5, 2)
-        ctx.fill()
+            # Crimson Combat Boots with Tread
+            ctx.set_source_rgb(0.80, 0.12, 0.16)
+            ctx.rectangle(-8 - leg_stride * 0.5, 22, 6.5, 7)
+            ctx.rectangle(1 + leg_stride * 0.5, 22, 6.5, 7)
+            ctx.fill()
+            ctx.set_source_rgb(0.20, 0.05, 0.05)
+            ctx.rectangle(-8 - leg_stride * 0.5, 27, 6.5, 2)
+            ctx.rectangle(1 + leg_stride * 0.5, 27, 6.5, 2)
+            ctx.fill()
 
         # 2. Torso with Red/White Abdominal Armor Stripes
         pat_chest = cairo.LinearGradient(0, -12, 0, 12)
@@ -220,15 +254,30 @@ class CaptainAmericaCharacter(BaseCharacter):
         ctx.fill()
 
         # 3. Arms & Tactical Red Gauntlets
-        ctx.set_source(pat_chest)
-        ctx.rectangle(-15, -8, 4.5, 15)
-        ctx.rectangle(10, -8, 4.5, 15)
-        ctx.fill()
-        # Red Combat Gauntlets
-        ctx.set_source_rgb(0.80, 0.12, 0.16)
-        ctx.rectangle(-15, 3, 4.5, 7)
-        ctx.rectangle(10, 3, 4.5, 7)
-        ctx.fill()
+        if self.is_hero_posing:
+            # Right Arm in Crisp Military Salute to Helmet Brow
+            ctx.set_source(pat_chest)
+            ctx.set_line_width(4.5)
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            ctx.new_path()
+            ctx.move_to(10, -6)
+            ctx.line_to(16, -14)
+            ctx.line_to(7, -19)
+            ctx.stroke()
+            # Red Combat Gauntlet on Salute Hand
+            ctx.set_source_rgb(0.80, 0.12, 0.16)
+            ctx.arc(7, -19, 3.0, 0, 2 * math.pi)
+            ctx.fill()
+        else:
+            ctx.set_source(pat_chest)
+            ctx.rectangle(-15, -8, 4.5, 15)
+            ctx.rectangle(10, -8, 4.5, 15)
+            ctx.fill()
+            # Red Combat Gauntlets
+            ctx.set_source_rgb(0.80, 0.12, 0.16)
+            ctx.rectangle(-15, 3, 4.5, 7)
+            ctx.rectangle(10, 3, 4.5, 7)
+            ctx.fill()
 
         # 4. Cowl Helmet with Embossed 'A' and Wings
         ctx.set_source(pat_chest)
@@ -263,30 +312,83 @@ class CaptainAmericaCharacter(BaseCharacter):
         # 5. Held Vibranium Shield
         if self.shield.state == "HELD":
             ctx.save()
-            if self.is_blocking:
+            if self.is_hero_posing:
+                # Proud Front-and-Center Raised Shield
+                ctx.translate(0, 1)
+                ctx.scale(1.08, 1.08)
+            elif self.is_blocking:
                 ctx.translate(14, -2)
                 ctx.scale(0.85, 1.0)
             else:
                 ctx.translate(-11, 4)
                 ctx.scale(0.55, 1.0)
 
-            # Draw Vibranium Shield with concentric rings
-            ctx.set_source_rgb(0.85, 0.12, 0.15)
-            ctx.arc(0, 0, 16, 0, 2 * math.pi)
+            # Outer Crimson Vibranium Ring with Specular Rim
+            ring_pat = cairo.RadialGradient(0, 0, 8, 0, 0, 17)
+            ring_pat.add_color_stop_rgb(0.0, 0.92, 0.18, 0.20)
+            ring_pat.add_color_stop_rgb(1.0, 0.65, 0.08, 0.10)
+            ctx.set_source(ring_pat)
+            ctx.arc(0, 0, 16.5, 0, 2 * math.pi)
             ctx.fill()
+
+            # Silver Alloy Ring
             ctx.set_source_rgb(0.92, 0.94, 0.98)
-            ctx.arc(0, 0, 12, 0, 2 * math.pi)
+            ctx.arc(0, 0, 12.5, 0, 2 * math.pi)
             ctx.fill()
-            ctx.set_source_rgb(0.85, 0.12, 0.15)
-            ctx.arc(0, 0, 8.5, 0, 2 * math.pi)
+
+            # Inner Crimson Ring
+            ctx.set_source(ring_pat)
+            ctx.arc(0, 0, 9.0, 0, 2 * math.pi)
             ctx.fill()
-            ctx.set_source_rgb(0.12, 0.28, 0.72)
-            ctx.arc(0, 0, 5.5, 0, 2 * math.pi)
+
+            # Deep Blue Center Field
+            blue_pat = cairo.RadialGradient(0, 0, 1, 0, 0, 6)
+            blue_pat.add_color_stop_rgb(0.0, 0.22, 0.45, 0.90)
+            blue_pat.add_color_stop_rgb(1.0, 0.08, 0.20, 0.60)
+            ctx.set_source(blue_pat)
+            ctx.arc(0, 0, 6.0, 0, 2 * math.pi)
             ctx.fill()
-            # Star
+
+            # 5-Pointed Brilliant White Star
             ctx.set_source_rgb(1.0, 1.0, 1.0)
-            ctx.arc(0, 0, 2.5, 0, 2 * math.pi)
+            ctx.new_path()
+            star_out = 4.0
+            star_in = 1.7
+            for i in range(5):
+                ang = -math.pi / 2 + i * (2 * math.pi / 5)
+                sx = math.cos(ang) * star_out
+                sy = math.sin(ang) * star_out
+                if i == 0:
+                    ctx.move_to(sx, sy)
+                else:
+                    ctx.line_to(sx, sy)
+                ang_in = ang + (math.pi / 5)
+                sx_in = math.cos(ang_in) * star_in
+                sy_in = math.sin(ang_in) * star_in
+                ctx.line_to(sx_in, sy_in)
+            ctx.close_path()
             ctx.fill()
+
+            # Star Lens Flare Gleam in Hero Pose
+            if self.is_hero_posing:
+                flare_time = self.anim_time * 5.0
+                flare_alpha = 0.6 + 0.3 * math.sin(flare_time)
+                ctx.set_source_rgba(1.0, 0.95, 0.6, flare_alpha)
+                ctx.set_line_width(1.8)
+                # 4-point light gleam
+                ctx.move_to(-12, 0)
+                ctx.line_to(12, 0)
+                ctx.move_to(0, -12)
+                ctx.line_to(0, 12)
+                ctx.stroke()
+                # Diagonal secondary glints
+                ctx.set_line_width(1.0)
+                ctx.move_to(-6, -6)
+                ctx.line_to(6, 6)
+                ctx.move_to(-6, 6)
+                ctx.line_to(6, -6)
+                ctx.stroke()
+
             ctx.restore()
 
         ctx.restore()
