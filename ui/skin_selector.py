@@ -56,7 +56,8 @@ class SkinSelectorDialog(Gtk.Dialog):
             self.flow.add(card)
             self.cards[meta["id"]] = card
 
-        # Connect both selection and double-click activation
+        # Connect both selection and single-click activation
+        self.flow.set_activate_on_single_click(True)
         self.flow.connect("selected-children-changed", self._on_selected_children_changed)
         self.flow.connect("child-activated", self._on_child_activated)
 
@@ -140,7 +141,7 @@ class SkinSelectorDialog(Gtk.Dialog):
 def show_skin_selector(engine):
     dialog = SkinSelectorDialog(engine)
     response = dialog.run()
-    if response == Gtk.ResponseType.APPLY:
+    if response in (Gtk.ResponseType.APPLY, Gtk.ResponseType.OK, Gtk.ResponseType.ACCEPT):
         print(f"[SkinSelector] Applying chosen skin: {dialog.selected_skin_id}")
         engine.switch_skin(dialog.selected_skin_id)
     dialog.destroy()

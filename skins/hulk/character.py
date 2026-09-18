@@ -6,7 +6,6 @@ import time
 import cairo
 from typing import Tuple, Dict, Any, List
 from skins.base import BaseCharacter, CharacterState
-from skins.manager import skin_manager
 from core.particles import ParticleManager
 
 
@@ -394,6 +393,3 @@ class HulkCharacter(BaseCharacter):
 
         ctx.restore()
         ctx.restore()
-
-
-skin_manager.register("hulk", HulkCharacter)

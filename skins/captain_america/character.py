@@ -6,7 +6,6 @@ import time
 import cairo
 from typing import Tuple, Dict, Any
 from skins.base import BaseCharacter, CharacterState
-from skins.manager import skin_manager
 from skins.captain_america.shield import VibraniumShield
 from core.projectiles import DesktopProjectileWindow
 from core.particles import ParticleManager, CYAN_GLOW
@@ -115,21 +114,20 @@ class CaptainAmericaCharacter(BaseCharacter):
         max_spd = 14.0 * speed_mult
         accel = 0.75 * speed_mult
 
-        tx = cursor_x - (40.0 if self.facing_right else -40.0)
-        ty = ground_y
-        dx = tx - self.x
-        dy = ty - self.y
-        dist = abs(dx)
+        # True vector to cursor without artificial offset
+        dx = cursor_x - self.x
+        dist_x = abs(dx)
 
-        if dist > 25.0:
-            self.vx += (1.0 if dx > 0 else -1.0) * min(dist * 0.08, accel)
+        if dist_x > 45.0:
+            self.vx += (1.0 if dx > 0 else -1.0) * min(dist_x * 0.08, accel)
             self.state = CharacterState.RUN
             # Dust puffs when sprinting
             if random.random() < 0.2:
                 particle_mgr.smoke_puff(self.x, self.y + 24, count=1)
         else:
+            # Peaceful touch/petting deadzone
             self.state = CharacterState.IDLE
-            self.vx *= 0.82
+            self.vx *= 0.70
 
         self.vx *= 0.88
         self.vy = 0.0
@@ -292,6 +290,3 @@ class CaptainAmericaCharacter(BaseCharacter):
             ctx.restore()
 
         ctx.restore()
-
-
-skin_manager.register("captain_america", CaptainAmericaCharacter)

@@ -6,7 +6,6 @@ import time
 import cairo
 from typing import Tuple, Dict, Any, List
 from skins.base import BaseCharacter, CharacterState
-from skins.manager import skin_manager
 from core.particles import ParticleManager, FIRE_ORANGE, FIRE_YELLOW
 from core.projectiles import DesktopProjectileWindow
 
@@ -114,19 +113,20 @@ class DragonCharacter(BaseCharacter):
         max_spd = 14.0 * speed_mult
         accel = 0.55 * speed_mult
 
-        target_y = cursor_y - 60.0
+        # True vector to cursor without artificial offset
         dx = cursor_x - self.x
-        dy = target_y - self.y
+        dy = cursor_y - self.y
         dist = math.hypot(dx, dy)
 
-        if dist > 80.0:
+        if dist > 50.0:
             self.vx += (dx / dist) * min(dist * 0.05, accel)
             self.vy += (dy / dist) * min(dist * 0.05, accel)
             self.state = CharacterState.FLY
         else:
+            # Peaceful touch/petting deadzone
             self.state = CharacterState.HOVER
-            self.vx *= 0.88
-            self.vy *= 0.88
+            self.vx *= 0.70
+            self.vy *= 0.70
 
         self.vx *= 0.92
         self.vy *= 0.92
@@ -389,6 +389,3 @@ class DragonCharacter(BaseCharacter):
 
         ctx.restore()
         ctx.restore()
-
-
-skin_manager.register("dragon", DragonCharacter)

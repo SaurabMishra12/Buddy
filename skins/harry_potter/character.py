@@ -6,7 +6,6 @@ import time
 import cairo
 from typing import Tuple, Dict, Any
 from skins.base import BaseCharacter, CharacterState
-from skins.manager import skin_manager
 from core.particles import ParticleManager, MAGIC_PURPLE, MAGIC_GOLD
 
 
@@ -81,19 +80,20 @@ class HarryPotterCharacter(BaseCharacter):
         max_spd = 13.0 * speed_mult
         accel = 0.55 * speed_mult
 
-        target_y = cursor_y - 40.0
+        # True vector to cursor without artificial offset
         dx = cursor_x - self.x
-        dy = target_y - self.y
+        dy = cursor_y - self.y
         dist = math.hypot(dx, dy)
 
-        if dist > 60.0:
+        if dist > 50.0:
             self.vx += (dx / dist) * min(dist * 0.06, accel)
             self.vy += (dy / dist) * min(dist * 0.06, accel)
             self.state = CharacterState.FLY
         else:
+            # Peaceful touch/petting deadzone
             self.state = CharacterState.HOVER
-            self.vx *= 0.88
-            self.vy *= 0.88
+            self.vx *= 0.70
+            self.vy *= 0.70
 
         self.vx *= 0.90
         self.vy *= 0.90
@@ -212,6 +212,3 @@ class HarryPotterCharacter(BaseCharacter):
         ctx.stroke()
 
         ctx.restore()
-
-
-skin_manager.register("harry_potter", HarryPotterCharacter)

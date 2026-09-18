@@ -6,7 +6,6 @@ import time
 import cairo
 from typing import Tuple, Dict, Any
 from skins.base import BaseCharacter, CharacterState
-from skins.manager import skin_manager
 from core.particles import ParticleManager
 
 
@@ -99,22 +98,22 @@ class DogCharacter(BaseCharacter):
 
         # Cursor follow / chase
         dx = cursor_x - self.x
-        dy = (cursor_y - 25.0) - self.y
+        dy = cursor_y - self.y
         dist = math.hypot(dx, dy)
 
         speed_mult = config_data.get("speed", 1.0)
         max_spd = 11.0 * speed_mult
         accel = 0.65 * speed_mult
 
-        if dist > 60.0 and config_data.get("cursor_follow", True):
+        if dist > 50.0 and config_data.get("cursor_follow", True):
             self.vx += (dx / dist) * min(dist * 0.06, accel)
             self.vy += (dy / dist) * min(dist * 0.06, accel)
             self.state = CharacterState.RUN if dist > 180.0 else CharacterState.WALK
             self.paw_step += 0.32
         else:
             self.state = CharacterState.IDLE
-            self.vx *= 0.85
-            self.vy *= 0.85
+            self.vx *= 0.70
+            self.vy *= 0.70
 
         self.vx *= 0.88
         self.vy *= 0.88
@@ -235,6 +234,3 @@ class DogCharacter(BaseCharacter):
             ctx.fill()
 
         ctx.restore()
-
-
-skin_manager.register("dog", DogCharacter)

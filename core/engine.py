@@ -2,6 +2,7 @@
 
 import time
 import math
+import random
 import cairo
 from typing import Optional, Dict, Any
 
@@ -22,8 +23,8 @@ from skins.base import BaseCharacter, CharacterState
 class BuddyEngine:
     """Coordinates lifecycle, animation pacing, input routing, and rendering for Buddy."""
 
-    def __init__(self, requested_skin: Optional[str] = None, debug_mode: bool = False):
-        self.config = config
+    def __init__(self, requested_skin: Optional[str] = None, debug_mode: bool = False, config: Optional[Any] = None):
+        self.config = config if config is not None else globals()["config"]
         self.debug_mode = debug_mode or self.config.get("debug_mode", False)
         self.paused = False
 
@@ -151,9 +152,18 @@ class BuddyEngine:
         elif norm_id == "batman":
             self.particles.shockwave(old_x, old_y, max_radius=60.0, color=(0.3, 0.3, 0.35))
             self.audio.play("swoosh")
-        else:
-            self.particles.burst_sparks(old_x, old_y, count=20)
-            self.audio.play("magic")
+        # Ensure non-flying ground characters are placed safely on the ground
+        if not meta.get("canFly", False):
+            min_x, min_y, screen_w, screen_h = self.window.bounds
+            self.character.y = min_y + screen_h - 70.0
+            self.character.vy = 0.0
+            self.character.is_airborne = False
+            self.character.state = CharacterState.IDLE
+
+        self.is_dragging = False
+        self.is_chasing = False
+        self.is_spinning = False
+        self.window.move_to(self.character.x, self.character.y)
 
         print(f"[Buddy Engine] Switched to skin: {norm_id.upper()}")
         return True
@@ -222,8 +232,8 @@ class BuddyEngine:
             self.particles.shockwave(cx, cy, max_radius=80.0, color=(1.0, 0.3, 0.1))
             self.audio.play("laser")
         elif skin_id == "dragon":
+            self.character.trigger_ability("fireball", cx, cy, self.particles, self.audio)
             self.particles.shockwave(cx, cy, max_radius=75.0, color=(1.0, 0.4, 0.0))
-            self.particles.flame_breath(cx, cy, cx + (50 if self.character.facing_right else -50), cy)
             self.audio.play("roar")
         elif skin_id == "cat":
             for _ in range(15):
@@ -233,11 +243,12 @@ class BuddyEngine:
             self.particles.burst_sparks(cx, cy, count=15, color=(1.0, 0.8, 0.2))
             self.audio.play("bark")
         elif skin_id == "hulk":
-            self.particles.shockwave(cx, cy, max_radius=85.0, color=(0.2, 0.9, 0.2))
-            self.audio.play("roar")
+            self.character.trigger_ability("ground_smash", cx, cy, self.particles, self.audio)
+            self.character.trigger_ability("thunderclap", cx, cy, self.particles, self.audio)
+            self.shake.trigger(14.0)
         elif skin_id == "ironman":
+            self.character.trigger_ability("repulsor_blast", cx, cy, self.particles, self.audio)
             self.particles.shockwave(cx, cy, max_radius=70.0, color=(0.2, 0.8, 1.0))
-            self.particles.burst_sparks(cx, cy, count=25, color=(0.2, 0.9, 1.0))
             self.audio.play("laser")
         elif skin_id == "harry_potter":
             for _ in range(20):
@@ -247,8 +258,8 @@ class BuddyEngine:
             self.character.trigger_ability("shield_throw", cx, cy, self.particles, self.audio)
             self.audio.play("laser")
         elif skin_id == "thanos":
-            self.particles.shockwave(cx, cy, max_radius=90.0, color=(0.7, 0.1, 0.9))
-            self.audio.play("magic")
+            self.character.trigger_ability("the_snap", cx, cy, self.particles, self.audio)
+            self.shake.trigger(16.0)
         elif skin_id == "batman":
             self.character.trigger_ability("smoke_bomb", cx, cy, self.particles, self.audio)
             self.audio.play("swoosh")
@@ -277,48 +288,134 @@ class BuddyEngine:
         self.cursor_y = py
 
         if not self.paused:
+            min_x, min_y, screen_w, screen_h = self.window.bounds
+            ground_y = min_y + screen_h - 70.0
+
             if self.is_dragging:
-                # Dragging: follow mouse directly with traversal animation
-                prev_x = self.character.x
-                prev_y = self.character.y
-                self.character.x = max(0.0, min(self.window.screen_w, self.cursor_x - self.drag_offset_x))
-                self.character.y = max(0.0, min(self.window.screen_h, self.cursor_y - self.drag_offset_y))
-                self.character.vx = self.character.x - prev_x
-                self.character.vy = self.character.y - prev_y
-                if abs(self.character.vx) > 1.0:
-                    self.character.facing_right = (self.character.vx >= 0.0)
-
-                # Character-specific traversal state while dragged
+                # Drag locomotion: Follow slightly slower than the mouse cursor,
+                # reaching that destination in their own distinct superhero way!
+                target_x = self.cursor_x
+                target_y = self.cursor_y
                 skin = self.character.skin_id
-                if skin in ("superman", "thor", "ironman", "dragon", "harry_potter"):
-                    self.character.state = CharacterState.FLY
-                elif skin == "hulk":
-                    self.character.state = CharacterState.JUMP
-                else:
-                    self.character.state = CharacterState.RUN
+                meta = skin_manager.get_metadata(skin) or {}
 
-                # Trailing particles while traversing/dragged
-                if skin == "thor":
-                    self.particles.burst_sparks(self.character.x, self.character.y + 15, count=2, color=CYAN_GLOW)
-                elif skin == "dragon":
-                    if random.random() < 0.4:
-                        self.particles.flame_puff(self.character.x, self.character.y + 10, count=1, size=4.0)
-                elif skin == "ironman":
-                    self.particles.burst_sparks(self.character.x, self.character.y + 16, count=2, color=(1.0, 0.5, 0.1))
-                elif skin == "superman":
-                    self.particles.burst_sparks(self.character.x, self.character.y + 16, count=1, color=(1.0, 0.2, 0.2))
+                dx = target_x - self.character.x
+                dy = target_y - self.character.y
+                dist = math.hypot(dx, dy)
+
+                if skin in ("superman", "thor", "ironman", "dragon", "harry_potter", "thanos"):
+                    # FLYERS: Smooth flight towards mouse destination
+                    if dist > 14.0:
+                        self.character.facing_right = (dx >= 0.0)
+                        self.character.state = CharacterState.FLY
+                        follow_spd = min(16.0, max(3.5, dist * 0.09))
+                        self.character.vx = (dx / dist) * follow_spd
+                        self.character.vy = (dy / dist) * follow_spd
+                        self.character.x += self.character.vx
+                        self.character.y += self.character.vy
+
+                        # Hero-specific flight effects
+                        if skin == "ironman":
+                            self.character.tilt = (self.character.vx / 16.0) * 0.28
+                            self.particles.burst_sparks(self.character.x, self.character.y + 16, count=2, color=(1.0, 0.5, 0.1))
+                            self.particles.burst_sparks(self.character.x - (8 if self.character.facing_right else -8), self.character.y + 18, count=1, color=CYAN_GLOW)
+                        elif skin == "superman":
+                            self.character.tilt = (self.character.vx / 16.0) * 0.22
+                            self.particles.burst_sparks(self.character.x - (12 if self.character.facing_right else -12), self.character.y + 8, count=1, color=(1.0, 0.2, 0.2))
+                            self.particles.burst_sparks(self.character.x, self.character.y + 12, count=1, color=(0.2, 0.4, 0.9))
+                        elif skin == "thor":
+                            self.particles.burst_sparks(self.character.x + (16 if self.character.facing_right else -16), self.character.y - 4, count=2, color=CYAN_GLOW)
+                        elif skin == "dragon":
+                            if random.random() < 0.35:
+                                self.particles.flame_puff(self.character.x, self.character.y + 10, count=1, size=4.0)
+                        elif skin == "harry_potter":
+                            self.particles.burst_sparks(self.character.x - (12 if self.character.facing_right else -12), self.character.y + 8, count=2, color=(1.0, 0.85, 0.2))
+                        elif skin == "thanos":
+                            self.particles.burst_sparks(self.character.x, self.character.y + 16, count=2, color=(0.7, 0.1, 0.9))
+                    else:
+                        self.character.state = CharacterState.HOVER
+                        self.character.vx *= 0.70
+                        self.character.vy *= 0.70
+                        self.character.tilt *= 0.80
+
                 elif skin == "hulk":
-                    if random.random() < 0.3:
-                        self.particles.smoke_puff(self.character.x, self.character.y + 20, count=1)
+                    # HULK: Traverses by Parabolic Super Leaps ("hulk should jump")
+                    dist_x = abs(dx)
+                    is_on_ground = (self.character.y >= ground_y - 4.0)
+
+                    if is_on_ground:
+                        if dist_x > 35.0 or target_y < ground_y - 50.0:
+                            # Launch Parabolic Super Leap!
+                            self.character.facing_right = (dx >= 0.0)
+                            self.character.state = CharacterState.JUMP
+                            self.character.is_airborne = True
+                            leap_vx = max(-16.0, min(16.0, dx * 0.09))
+                            leap_vy = min(-15.0, max(-24.0, -17.0 - max(0.0, ground_y - target_y) * 0.06))
+                            self.character.vx = leap_vx
+                            self.character.vy = leap_vy
+                            self.particles.shockwave(self.character.x, ground_y + 20, max_radius=40.0, color=(0.3, 0.85, 0.2))
+                            self.particles.smoke_puff(self.character.x, ground_y + 20, count=4)
+                            self.audio.play("smash")
+                        else:
+                            self.character.state = CharacterState.IDLE
+                            self.character.vx *= 0.70
+                    else:
+                        # Airborne parabolic trajectory with Titan gravity
+                        self.character.vy += 0.95
+                        self.character.vx += (1.0 if dx > 0 else -1.0) * 0.25
+                        self.character.vx = max(-16.0, min(16.0, self.character.vx))
+                        self.character.x += self.character.vx
+                        self.character.y += self.character.vy
+
+                        # Landing impact
+                        if self.character.y >= ground_y:
+                            self.character.y = ground_y
+                            self.character.vy = 0.0
+                            self.character.is_airborne = False
+                            self.particles.shockwave(self.character.x, ground_y + 20, max_radius=50.0, color=(0.25, 0.88, 0.25))
+                            self.particles.smoke_puff(self.character.x, ground_y + 20, count=5)
+                            self.audio.play("smash")
+
+                else:
+                    # RUNNERS (Captain America, Cat, Dog, Batman):
+                    # Sprint rapidly along ground towards destination
+                    dist_x = abs(dx)
+                    self.character.facing_right = (dx >= 0.0)
+
+                    if dist_x > 20.0:
+                        self.character.state = CharacterState.RUN
+                        run_spd = min(14.0, max(3.0, dist_x * 0.10))
+                        self.character.vx = (1.0 if dx > 0 else -1.0) * run_spd
+                        self.character.x += self.character.vx
+                        if random.random() < 0.25:
+                            self.particles.smoke_puff(self.character.x, ground_y + 20, count=1)
+                    else:
+                        self.character.state = CharacterState.IDLE
+                        self.character.vx *= 0.70
+
+                    # If mouse is pulled high into the air, runner can jump / reach up!
+                    if target_y < ground_y - 60.0:
+                        if self.character.y >= ground_y - 2.0 and dist_x < 60.0:
+                            self.character.vy = -12.0
+                            self.character.state = CharacterState.JUMP
+                        elif self.character.y < ground_y:
+                            self.character.vy += 0.8
+                            self.character.y += self.character.vy
+                            if self.character.y >= ground_y:
+                                self.character.y = ground_y
+                                self.character.vy = 0.0
+                    else:
+                        self.character.y = ground_y
+
+                # Screen boundary clamp
+                self.character.x = max(min_x + 50.0, min(min_x + screen_w - 50.0, self.character.x))
+                self.character.y = max(min_y + 50.0, min(ground_y if not meta.get("canFly", False) else min_y + screen_h - 50.0, self.character.y))
+
             else:
-                # Smart hysteresis deadzone like Mjolnir:
-                # Closer than 55px -> character does NOT run away; stays calm so user can click or drag it!
-                # Farther than 110px -> character wakes up and chases cursor across screen
+                # Normal peaceful behavior when not dragging:
+                # Closer than 50px -> Character stays calm in IDLE/HOVER; user can touch/click/drag without fleeing!
                 dist_to_cursor = math.hypot(self.cursor_x - self.character.x, self.cursor_y - self.character.y)
-                if dist_to_cursor > 110.0:
-                    self.is_chasing = True
-                elif dist_to_cursor < 55.0:
-                    self.is_chasing = False
+                self.is_chasing = (dist_to_cursor > 50.0)
 
                 # Handle spin animation
                 if self.is_spinning:
@@ -328,15 +425,10 @@ class BuddyEngine:
                         self.is_spinning = False
                         self.character.tilt = 0.0
 
-                # Target coordinates passed to character:
-                # If within deadzone and idle, target is character's current position so it stays put!
-                target_x = self.cursor_x if self.is_chasing else self.character.x
-                target_y = self.cursor_y if self.is_chasing else self.character.y
-
                 self.character.update(
                     dt,
-                    target_x,
-                    target_y,
+                    self.cursor_x,
+                    self.cursor_y,
                     self.window.bounds,
                     self.particles,
                     self.audio,
@@ -484,17 +576,14 @@ class BuddyEngine:
         return False
 
     def on_motion(self, widget: Gtk.Widget, event: Gdk.EventMotion) -> bool:
-        if self.is_dragging:
-            try:
-                px, py = self.window.query_pointer()
-                self.character.x = max(0.0, min(self.window.screen_w, px - self.drag_offset_x))
-                self.character.y = max(0.0, min(self.window.screen_h, py - self.drag_offset_y))
-                self.character.vx = 0.0
-                self.character.vy = 0.0
-                self.window.move_to(self.character.x, self.character.y)
-                return True
-            except Exception:
-                pass
+        """Update global cursor coordinates during mouse motion."""
+        try:
+            px, py = self.window.query_pointer()
+            self.cursor_x = px
+            self.cursor_y = py
+            return True
+        except Exception:
+            pass
         return False
 
     def on_scroll(self, widget: Gtk.Widget, event: Gdk.EventScroll) -> bool:

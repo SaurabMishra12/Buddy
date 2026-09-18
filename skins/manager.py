@@ -3,11 +3,26 @@
 import os
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Type
+from typing import Dict, Any, List, Optional, Type, Tuple
 from skins.base import BaseCharacter
 
 SKINS_DIR = Path(__file__).parent
 USER_SKINS_DIR = Path.home() / ".config" / "buddy" / "skins"
+
+
+BUILTIN_SKINS: Dict[str, Tuple[str, str]] = {
+    "thor": ("skins.thor.character", "ThorCharacter"),
+    "dragon": ("skins.dragon.character", "DragonCharacter"),
+    "cat": ("skins.cat.character", "CatCharacter"),
+    "dog": ("skins.dog.character", "DogCharacter"),
+    "hulk": ("skins.hulk.character", "HulkCharacter"),
+    "ironman": ("skins.ironman.character", "IronManCharacter"),
+    "harry_potter": ("skins.harry_potter.character", "HarryPotterCharacter"),
+    "captain_america": ("skins.captain_america.character", "CaptainAmericaCharacter"),
+    "thanos": ("skins.thanos.character", "ThanosCharacter"),
+    "batman": ("skins.batman.character", "BatmanCharacter"),
+    "superman": ("skins.superman.character", "SupermanCharacter"),
+}
 
 
 class SkinManager:
@@ -16,7 +31,7 @@ class SkinManager:
     def __init__(self):
         self._registry: Dict[str, Type[BaseCharacter]] = {}
         self._metadata_cache: Dict[str, Dict[str, Any]] = {}
-        self._discover_and_register_all()
+        self._populate_metadata()
 
     def register(self, skin_id: str, character_cls: Type[BaseCharacter], metadata: Optional[Dict[str, Any]] = None) -> None:
         """Register a character class with its metadata."""
@@ -24,9 +39,8 @@ class SkinManager:
         if metadata:
             self._metadata_cache[skin_id] = metadata
 
-    def _discover_and_register_all(self) -> None:
-        """Dynamically load built-in skin modules."""
-        # Built-in skin definitions
+    def _populate_metadata(self) -> None:
+        """Load metadata definitions for all built-in skins."""
         skin_defs = [
             ("thor", "Thor", "Norse God of Thunder wielding Mjolnir with fractal lightning.", ["hammer_throw", "lightning", "flight", "hammer_spin"]),
             ("dragon", "Dragon", "Fantasy winged dragon breathing fire and soaring the desktop.", ["fire_breath", "fireball", "flight", "glide"]),
@@ -61,6 +75,18 @@ class SkinManager:
                     pass
             self._metadata_cache[skin_id] = meta
 
+    def _discover_and_register_all(self) -> None:
+        """Dynamically load and register built-in skin modules."""
+        import importlib
+        for skin_id, (mod_path, cls_name) in BUILTIN_SKINS.items():
+            try:
+                mod = importlib.import_module(mod_path)
+                cls = getattr(mod, cls_name, None)
+                if cls:
+                    self.register(skin_id, cls)
+            except Exception as e:
+                print(f"[SkinManager] Warning: failed to load module {mod_path}: {e}")
+
     @staticmethod
     def normalize_skin_id(skin_id: str) -> str:
         """Normalize skin name to canonical lowercase ID."""
@@ -90,13 +116,27 @@ class SkinManager:
     def create_character(self, skin_id: str, x: float = 500.0, y: float = 400.0) -> BaseCharacter:
         """Instantiate character for specified skin ID with fallback to Thor if missing."""
         norm_id = self.normalize_skin_id(skin_id)
-        target_id = norm_id if norm_id in self._registry else "thor"
-        cls = self._registry.get(target_id)
+        if norm_id not in self._registry:
+            if norm_id in BUILTIN_SKINS:
+                try:
+                    import importlib
+                    mod_path, cls_name = BUILTIN_SKINS[norm_id]
+                    mod = importlib.import_module(mod_path)
+                    cls = getattr(mod, cls_name, None)
+                    if cls:
+                        self.register(norm_id, cls)
+                except Exception as e:
+                    print(f"[SkinManager] Error lazy importing {norm_id}: {e}")
+
+        cls = self._registry.get(norm_id)
         if not cls:
-            # Fallback import of thor character if registry not populated yet
-            from skins.thor.character import ThorCharacter
-            return ThorCharacter(x, y)
+            # Fallback to thor character if target class unavailable
+            cls = self._registry.get("thor")
+            if not cls:
+                from skins.thor.character import ThorCharacter
+                return ThorCharacter(x, y)
         return cls(x, y)
 
 
 skin_manager = SkinManager()
+skin_manager._discover_and_register_all()

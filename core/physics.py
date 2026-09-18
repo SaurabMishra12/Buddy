@@ -151,6 +151,11 @@ class ScreenShake:
         """Trigger an impact screen shake."""
         self.intensity = max(self.intensity, intensity)
 
+    def add_shake(self, intensity: float = 12.0, decay: float = 0.90) -> None:
+        """Alias for trigger with optional decay parameter."""
+        self.intensity = max(self.intensity, intensity)
+        self.decay = decay
+
     def update(self) -> Tuple[float, float]:
         """Update shake decay and return current (offset_x, offset_y)."""
         if self.intensity > 0.5:

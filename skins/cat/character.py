@@ -6,7 +6,6 @@ import time
 import cairo
 from typing import Tuple, Dict, Any
 from skins.base import BaseCharacter, CharacterState
-from skins.manager import skin_manager
 from core.particles import ParticleManager
 
 
@@ -98,14 +97,14 @@ class CatCharacter(BaseCharacter):
 
         # Movement physics
         dx = cursor_x - self.x
-        dy = (cursor_y - 20.0) - self.y
+        dy = cursor_y - self.y
         dist = math.hypot(dx, dy)
 
         speed_mult = config_data.get("speed", 1.0)
         max_spd = 9.0 * speed_mult
         accel = 0.45 * speed_mult
 
-        if dist > 70.0 and config_data.get("cursor_follow", True):
+        if dist > 50.0 and config_data.get("cursor_follow", True):
             # Walking or running
             self.vx += (dx / dist) * min(dist * 0.05, accel)
             self.vy += (dy / dist) * min(dist * 0.05, accel)
@@ -113,8 +112,8 @@ class CatCharacter(BaseCharacter):
             self.paw_step += 0.25
         else:
             self.state = CharacterState.IDLE
-            self.vx *= 0.85
-            self.vy *= 0.85
+            self.vx *= 0.70
+            self.vy *= 0.70
 
         self.vx *= 0.90
         self.vy *= 0.90
@@ -261,6 +260,3 @@ class CatCharacter(BaseCharacter):
         ctx.stroke()
 
         ctx.restore()
-
-
-skin_manager.register("cat", CatCharacter)

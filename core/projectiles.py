@@ -173,14 +173,19 @@ class DesktopProjectileWindow(Gtk.Window):
         for _ in range(16):
             ang = random.uniform(0, 2 * math.pi)
             spd = random.uniform(3.0, 8.0)
-            col = CYAN_GLOW if self.proj_type in ("shield", "mjolnir") else FIRE_YELLOW
+            if self.proj_type == "power_blast":
+                col = (0.85, 0.20, 1.0)
+            elif self.proj_type in ("shield", "mjolnir"):
+                col = CYAN_GLOW
+            else:
+                col = FIRE_YELLOW
             self.sparks.append({
                 "x": self.half_size,
                 "y": self.half_size,
                 "vx": math.cos(ang) * spd,
                 "vy": math.sin(ang) * spd,
                 "color": col,
-                "life": random.randint(10, 20)
+                "life": random.randint(12, 24)
             })
 
         if self.proj_type in ("shield", "mjolnir", "fireball"):
@@ -194,6 +199,9 @@ class DesktopProjectileWindow(Gtk.Window):
             # Reverse bounce direction
             self.vx = -self.vx * 0.7
             self.vy = -self.vy * 0.7
+        elif self.proj_type == "power_blast":
+            audio_manager.play("smash")
+            self.state = "EXPLODING"
         else:
             # Repulsor blast detonates on impact
             audio_manager.play("laser")
@@ -216,20 +224,30 @@ class DesktopProjectileWindow(Gtk.Window):
 
         # Draw shockwave
         if self.shockwave_alpha > 0:
-            ctx.set_line_width(3.0 * self.shockwave_alpha)
-            col = CYAN_GLOW if self.proj_type in ("shield", "mjolnir") else FIRE_ORANGE
+            ctx.set_line_width(3.5 * self.shockwave_alpha)
+            if self.proj_type == "power_blast":
+                col = (0.75, 0.10, 0.95)
+            elif self.proj_type in ("shield", "mjolnir"):
+                col = CYAN_GLOW
+            else:
+                col = FIRE_ORANGE
             ctx.set_source_rgba(col[0], col[1], col[2], self.shockwave_alpha)
             ctx.arc(self.half_size, self.half_size, self.shockwave_rad, 0, 2 * math.pi)
             ctx.stroke()
 
         if self.state == "EXPLODING":
             # Explosion blast
-            rad = 12.0 + self.explosion_frame * 3.0
+            rad = 12.0 + self.explosion_frame * 3.2
             alpha = max(0.0, 1.0 - self.explosion_frame / 14.0)
             pat = cairo.RadialGradient(self.half_size, self.half_size, 2, self.half_size, self.half_size, rad)
-            pat.add_color_stop_rgba(0.0, 1.0, 1.0, 0.9, alpha)
-            pat.add_color_stop_rgba(0.4, 1.0, 0.5, 0.1, alpha * 0.8)
-            pat.add_color_stop_rgba(1.0, 0.8, 0.1, 0.0, 0.0)
+            if self.proj_type == "power_blast":
+                pat.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, alpha)
+                pat.add_color_stop_rgba(0.4, 0.95, 0.20, 1.0, alpha * 0.9)
+                pat.add_color_stop_rgba(1.0, 0.50, 0.05, 0.85, 0.0)
+            else:
+                pat.add_color_stop_rgba(0.0, 1.0, 1.0, 0.9, alpha)
+                pat.add_color_stop_rgba(0.4, 1.0, 0.5, 0.1, alpha * 0.8)
+                pat.add_color_stop_rgba(1.0, 0.8, 0.1, 0.0, 0.0)
             ctx.set_source(pat)
             ctx.arc(self.half_size, self.half_size, rad, 0, 2 * math.pi)
             ctx.fill()
@@ -352,3 +370,23 @@ class DesktopProjectileWindow(Gtk.Window):
             ctx.set_source(pat)
             ctx.arc(0, 0, rad, 0, 2 * math.pi)
             ctx.fill()
+
+        elif self.proj_type == "power_blast":
+            # Thanos Power Stone Cosmic Energy Orb
+            rad = 19.0
+            pat = cairo.RadialGradient(0, 0, 2, 0, 0, rad)
+            pat.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, alpha)
+            pat.add_color_stop_rgba(0.35, 0.95, 0.20, 1.0, 0.95 * alpha)
+            pat.add_color_stop_rgba(0.75, 0.60, 0.05, 0.85, 0.85 * alpha)
+            pat.add_color_stop_rgba(1.0, 0.25, 0.0, 0.40, 0.0)
+            ctx.set_source(pat)
+            ctx.arc(0, 0, rad, 0, 2 * math.pi)
+            ctx.fill()
+
+            # Orbiting cosmic power sparks
+            ctx.set_source_rgba(1.0, 0.85, 0.25, 0.9 * alpha)
+            for ang in [0.0, 1.25, 2.5, 3.75, 5.0]:
+                px = math.cos(ang + self.angle * 2.0) * 12.0
+                py = math.sin(ang + self.angle * 2.0) * 12.0
+                ctx.arc(px, py, 2.0, 0, 2 * math.pi)
+                ctx.fill()

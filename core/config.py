@@ -3,7 +3,7 @@
 import os
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 CONFIG_DIR = Path.home() / ".config" / "buddy"
 CONFIG_FILE = CONFIG_DIR / "config.json"
@@ -41,8 +41,13 @@ DEFAULT_CONFIG: Dict[str, Any] = {
 class Config:
     """Manages application settings with JSON persistence."""
 
-    def __init__(self, config_file: Path = CONFIG_FILE):
-        self.config_file = Path(config_file)
+    def __init__(self, config_file: Optional[Path] = None, profile: Optional[str] = None):
+        if config_file:
+            self.config_file = Path(config_file)
+        elif profile:
+            self.config_file = CONFIG_DIR / f"config_{profile}.json"
+        else:
+            self.config_file = CONFIG_FILE
         self.data: Dict[str, Any] = dict(DEFAULT_CONFIG)
         self.ensure_dirs()
         self.load()
@@ -104,3 +109,4 @@ class Config:
 
 # Global config instance for convenience
 config = Config()
+ConfigManager = Config

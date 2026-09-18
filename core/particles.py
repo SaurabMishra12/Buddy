@@ -291,6 +291,11 @@ class ParticleManager:
         self.bolts: List[LightningBolt] = []
         self.enabled: bool = True
 
+    @property
+    def particles(self) -> List[Any]:
+        """Aggregate list of all active particulate entities."""
+        return list(self.sparks) + list(self.flames) + list(self.smoke)
+
     def clear(self) -> None:
         """Clear all active particles."""
         self.sparks.clear()

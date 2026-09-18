@@ -7,7 +7,6 @@ import cairo
 from typing import Tuple, Dict, Any, Optional
 
 from skins.base import BaseCharacter, CharacterState
-from skins.manager import skin_manager
 from skins.thor.cape import Cape
 from skins.thor.hammer import Mjolnir
 from core.particles import ParticleManager, CYAN_GLOW
@@ -157,24 +156,22 @@ class ThorCharacter(BaseCharacter):
         accel = 0.8 * speed_mult
         friction = 0.88
 
-        tx = cursor_x + self.target_offset_x
-        ty = cursor_y + self.target_offset_y
-
-        dx = tx - self.x
-        dy = ty - self.y
+        # True vector to cursor without artificial offset
+        dx = cursor_x - self.x
+        dy = cursor_y - self.y
         dist = math.hypot(dx, dy)
 
-        if dist > 8.0:
+        if dist > 50.0:
             self.vx += (dx / dist) * min(dist * 0.08, accel)
             self.vy += (dy / dist) * min(dist * 0.08, accel)
             if self.state not in ("SUMMONING", CharacterState.ATTACK):
                 self.state = CharacterState.FLY
         else:
+            # Peaceful touch/petting deadzone
             if self.state not in ("SUMMONING", CharacterState.ATTACK):
                 self.state = CharacterState.IDLE
-
-        self.vx *= friction
-        self.vy *= friction
+            self.vx *= 0.70
+            self.vy *= 0.70
 
         spd = math.hypot(self.vx, self.vy)
         if spd > max_speed:
@@ -469,7 +466,3 @@ class ThorCharacter(BaseCharacter):
             self.mjolnir.draw(ctx)
 
         ctx.restore()
-
-
-# Register Thor skin with the manager
-skin_manager.register("thor", ThorCharacter)

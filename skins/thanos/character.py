@@ -6,9 +6,9 @@ import time
 import cairo
 from typing import Tuple, Dict, Any, List
 from skins.base import BaseCharacter, CharacterState
-from skins.manager import skin_manager
 from core.particles import ParticleManager, COSMIC_VIOLET, CYAN_GLOW
 from core.audio import audio_manager
+from core.projectiles import DesktopProjectileWindow
 
 
 class ThanosCharacter(BaseCharacter):
@@ -34,29 +34,48 @@ class ThanosCharacter(BaseCharacter):
     ) -> bool:
         if ability_name in ("the_snap", "infinity_snap", "signature"):
             self.is_snapping = True
-            self.snap_end_time = time.time() + 1.4
-            # Colossal cosmic shockwaves
-            particle_mgr.shockwave(self.x, self.y, max_radius=85.0, color=(1.0, 0.88, 0.25))
-            particle_mgr.shockwave(self.x, self.y, max_radius=60.0, color=COSMIC_VIOLET)
-            particle_mgr.burst_sparks(self.x, self.y, count=30, color=(0.85, 0.40, 0.95), size=3.0)
+            self.snap_end_time = time.time() + 1.8
+            # Multi-layer cosmic shockwaves
+            particle_mgr.shockwave(self.x, self.y, max_radius=95.0, color=(1.0, 0.88, 0.25))
+            particle_mgr.shockwave(self.x, self.y, max_radius=75.0, color=COSMIC_VIOLET)
+            particle_mgr.shockwave(self.x, self.y, max_radius=55.0, color=CYAN_GLOW)
+            particle_mgr.burst_sparks(self.x, self.y, count=45, color=(0.85, 0.40, 0.95), size=3.2)
             audio_mgr.play("smash")
+            audio_mgr.play("magic")
             return True
         elif ability_name == "power_blast":
             self.active_stone = "power"
+            DesktopProjectileWindow(
+                proj_type="power_blast",
+                start_x=self.x,
+                start_y=self.y,
+                target_x=target_x,
+                target_y=target_y,
+                owner_getter=lambda: (self.x, self.y),
+                speed=26.0
+            )
             particle_mgr.shockwave(self.x, self.y, max_radius=60.0, color=COSMIC_VIOLET)
             particle_mgr.burst_sparks(self.x, self.y, count=18, color=COSMIC_VIOLET)
-            audio_mgr.play("magic")
+            audio_mgr.play("laser")
             return True
         elif ability_name == "time_stone":
             self.active_stone = "time"
-            particle_mgr.shockwave(self.x, self.y, max_radius=70.0, color=(0.15, 0.95, 0.35))
+            particle_mgr.shockwave(self.x, self.y, max_radius=75.0, color=(0.15, 0.95, 0.35))
+            particle_mgr.burst_sparks(self.x, self.y, count=22, color=(0.15, 0.95, 0.35))
             audio_mgr.play("magic")
             return True
-        elif ability_name == "space_stone":
+        elif ability_name in ("space_teleport", "space_stone", "teleport"):
             self.active_stone = "space"
-            particle_mgr.shockwave(self.x, self.y, max_radius=65.0, color=CYAN_GLOW)
-            particle_mgr.burst_sparks(self.x, self.y, count=14, color=CYAN_GLOW)
+            # Blue portal departure
+            particle_mgr.shockwave(self.x, self.y, max_radius=70.0, color=CYAN_GLOW)
+            particle_mgr.burst_sparks(self.x, self.y, count=20, color=CYAN_GLOW)
             audio_mgr.play("teleport")
+            # Teleport near destination
+            self.x = target_x - (40.0 if self.facing_right else -40.0)
+            self.y = target_y
+            # Blue portal arrival
+            particle_mgr.shockwave(self.x, self.y, max_radius=70.0, color=CYAN_GLOW)
+            particle_mgr.burst_sparks(self.x, self.y, count=25, color=CYAN_GLOW)
             return True
         return False
 
@@ -93,27 +112,25 @@ class ThanosCharacter(BaseCharacter):
             else:
                 self.trigger_ability("the_snap", cursor_x, cursor_y, particle_mgr, audio_mgr)
 
-        # Smooth, imposing Titan levitation (no rapid oscillation)
+        # Smooth, imposing Titan levitation
         speed_mult = config_data.get("speed", 1.0)
         max_spd = 12.0 * speed_mult
         accel = 0.45 * speed_mult
 
-        # Target smoothly floats behind or near cursor
-        target_offset_x = -45.0 if self.facing_right else 45.0
-        tx = cursor_x + target_offset_x
-        ty = cursor_y - 30.0
-        dx = tx - self.x
-        dy = ty - self.y
+        # True vector to cursor without artificial offset
+        dx = cursor_x - self.x
+        dy = cursor_y - self.y
         dist = math.hypot(dx, dy)
 
-        if dist > 15.0:
+        if dist > 48.0:
             self.vx += (dx / dist) * min(dist * 0.04, accel)
             self.vy += (dy / dist) * min(dist * 0.04, accel)
             self.state = CharacterState.FLY
         else:
+            # Peaceful petting/touch deadzone: stays still and calm!
             self.state = CharacterState.HOVER
-            self.vx *= 0.85
-            self.vy *= 0.85
+            self.vx *= 0.70
+            self.vy *= 0.70
 
         self.vx *= 0.90
         self.vy *= 0.90
@@ -319,6 +336,3 @@ class ThanosCharacter(BaseCharacter):
 
         ctx.restore()
         ctx.restore()
-
-
-skin_manager.register("thanos", ThanosCharacter)

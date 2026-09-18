@@ -6,7 +6,6 @@ import time
 import cairo
 from typing import Tuple, Dict, Any
 from skins.base import BaseCharacter, CharacterState
-from skins.manager import skin_manager
 from core.particles import ParticleManager, CYAN_GLOW
 
 
@@ -94,20 +93,20 @@ class SupermanCharacter(BaseCharacter):
         max_spd = 22.0 * speed_mult
         accel = 1.10 * speed_mult
 
-        tx = cursor_x - (40.0 if self.facing_right else -40.0)
-        ty = cursor_y - 45.0
-        dx = tx - self.x
-        dy = ty - self.y
+        # True vector to cursor without artificial offset
+        dx = cursor_x - self.x
+        dy = cursor_y - self.y
         dist = math.hypot(dx, dy)
 
-        if dist > 40.0:
+        if dist > 50.0:
             self.vx += (dx / dist) * min(dist * 0.08, accel)
             self.vy += (dy / dist) * min(dist * 0.08, accel)
             self.state = CharacterState.FLY
         else:
+            # Peaceful touch/petting deadzone
             self.state = CharacterState.HOVER
-            self.vx *= 0.86
-            self.vy *= 0.86
+            self.vx *= 0.70
+            self.vy *= 0.70
 
         self.vx *= 0.91
         self.vy *= 0.91
@@ -440,6 +439,3 @@ class SupermanCharacter(BaseCharacter):
 
         ctx.restore()
         ctx.restore()
-
-
-skin_manager.register("superman", SupermanCharacter)
