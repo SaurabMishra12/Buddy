@@ -278,22 +278,38 @@ class BuddyEngine:
 
         if not self.paused:
             if self.is_dragging:
-                # Dragging: follow mouse directly
+                # Dragging: follow mouse directly with traversal animation
+                prev_x = self.character.x
+                prev_y = self.character.y
                 self.character.x = max(0.0, min(self.window.screen_w, self.cursor_x - self.drag_offset_x))
                 self.character.y = max(0.0, min(self.window.screen_h, self.cursor_y - self.drag_offset_y))
-                self.character.vx = 0.0
-                self.character.vy = 0.0
-                self.character.facing_right = (self.cursor_x >= self.character.x)
+                self.character.vx = self.character.x - prev_x
+                self.character.vy = self.character.y - prev_y
+                if abs(self.character.vx) > 1.0:
+                    self.character.facing_right = (self.character.vx >= 0.0)
 
-                # Trail particles while dragging
-                if self.character.skin_id == "thor":
+                # Character-specific traversal state while dragged
+                skin = self.character.skin_id
+                if skin in ("superman", "thor", "ironman", "dragon", "harry_potter"):
+                    self.character.state = CharacterState.FLY
+                elif skin == "hulk":
+                    self.character.state = CharacterState.JUMP
+                else:
+                    self.character.state = CharacterState.RUN
+
+                # Trailing particles while traversing/dragged
+                if skin == "thor":
                     self.particles.burst_sparks(self.character.x, self.character.y + 15, count=2, color=CYAN_GLOW)
-                elif self.character.skin_id == "dragon":
-                    self.particles.flames.append(self.particles.create_flame(self.character.x, self.character.y + 10))
-                elif self.character.skin_id == "ironman":
+                elif skin == "dragon":
+                    if random.random() < 0.4:
+                        self.particles.flame_puff(self.character.x, self.character.y + 10, count=1, size=4.0)
+                elif skin == "ironman":
                     self.particles.burst_sparks(self.character.x, self.character.y + 16, count=2, color=(1.0, 0.5, 0.1))
-                elif self.character.skin_id == "superman":
+                elif skin == "superman":
                     self.particles.burst_sparks(self.character.x, self.character.y + 16, count=1, color=(1.0, 0.2, 0.2))
+                elif skin == "hulk":
+                    if random.random() < 0.3:
+                        self.particles.smoke_puff(self.character.x, self.character.y + 20, count=1)
             else:
                 # Smart hysteresis deadzone like Mjolnir:
                 # Closer than 55px -> character does NOT run away; stays calm so user can click or drag it!
@@ -419,7 +435,13 @@ class BuddyEngine:
             self.is_chasing = False
             self.drag_offset_x = event.x - self.window.half_size
             self.drag_offset_y = event.y - self.window.half_size
-            self.character.state = CharacterState.INTERACT
+            skin = self.character.skin_id
+            if skin in ("superman", "thor", "ironman", "dragon", "harry_potter"):
+                self.character.state = CharacterState.FLY
+            elif skin == "hulk":
+                self.character.state = CharacterState.JUMP
+            else:
+                self.character.state = CharacterState.RUN
 
             if self.character.skin_id == "cat":
                 self.audio.play("purr")
@@ -430,6 +452,8 @@ class BuddyEngine:
             elif self.character.skin_id == "thor":
                 self.audio.play("lightning")
                 self.particles.burst_sparks(self.character.x, self.character.y, count=14, color=CYAN_GLOW)
+            elif self.character.skin_id == "hulk":
+                self.audio.play("roar")
             else:
                 self.audio.play("magic")
 
@@ -440,9 +464,22 @@ class BuddyEngine:
 
     def on_button_release(self, widget: Gtk.Widget, event: Gdk.EventButton) -> bool:
         if event.button == 1:
+            was_dragging = self.is_dragging
             self.is_dragging = False
             self.is_chasing = False
-            self.character.state = CharacterState.IDLE
+            skin = self.character.skin_id
+            if was_dragging:
+                if skin == "hulk":
+                    # Release drop: Hulk plunges down to smash the ground!
+                    self.character.state = CharacterState.JUMP
+                    self.character.vy = 10.0
+                    self.character.is_airborne = True
+                elif skin in ("superman", "thor", "ironman", "dragon", "harry_potter"):
+                    self.character.state = CharacterState.HOVER
+                else:
+                    self.character.state = CharacterState.IDLE
+            else:
+                self.character.state = CharacterState.IDLE
             return True
         return False
 

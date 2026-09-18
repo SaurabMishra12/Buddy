@@ -48,7 +48,7 @@ class TestThorAndMjolnir(unittest.TestCase):
         # Hammer throw
         success = self.thor.trigger_ability("hammer_throw", 800.0, 400.0, self.particles, audio_mgr=audio_manager)
         self.assertTrue(success)
-        self.assertEqual(self.thor.mjolnir.state, "THROWN")
+        self.assertIn(self.thor.mjolnir.state, ("THROWN", "DESKTOP_THROWN"))
 
         # Lightning summon
         lightning_success = self.thor.trigger_ability("lightning_summon", 600.0, 400.0, self.particles, audio_mgr=audio_manager)

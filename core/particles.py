@@ -344,12 +344,13 @@ class ParticleManager:
         x: float,
         y: float,
         max_radius: float = 65.0,
-        color: Tuple[float, float, float] = CYAN_GLOW
+        color: Tuple[float, float, float] = CYAN_GLOW,
+        line_width: float = 2.8
     ) -> None:
         """Emit an expanding shockwave ring."""
         if not self.enabled:
             return
-        self.shockwaves.append(Shockwave(x, y, max_radius=max_radius, color=color))
+        self.shockwaves.append(Shockwave(x, y, max_radius=max_radius, color=color, line_width=line_width))
 
     def flame_puff(self, x: float, y: float, vx: float = 0.0, vy: float = -3.0, count: int = 3, size: float = 5.0) -> None:
         """Spawn flame particles for dragons, rockets, and explosions."""

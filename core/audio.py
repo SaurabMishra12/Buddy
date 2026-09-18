@@ -97,16 +97,33 @@ class SoundManager:
         if not sound_file or not os.path.exists(sound_file):
             return
 
-        def _worker():
-            try:
-                cmd = [self.player_cmd, sound_file] if self.player_cmd != "canberra-gtk-play" else [self.player_cmd, "-f", sound_file]
-                proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                proc.wait(timeout=2.0)
-            except Exception:
-                pass
-
+        # Bounded audio queue and worker thread prevents OS thread/process exhaustion
+        import queue
         import threading
-        threading.Thread(target=_worker, daemon=True).start()
+
+        if not hasattr(self, "_audio_queue"):
+            self._audio_queue = queue.Queue(maxsize=4)
+            def _audio_loop():
+                while True:
+                    cmd = self._audio_queue.get()
+                    if cmd is None:
+                        break
+                    try:
+                        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        proc.wait(timeout=1.5)
+                    except Exception:
+                        pass
+                    finally:
+                        self._audio_queue.task_done()
+
+            t = threading.Thread(target=_audio_loop, daemon=True)
+            t.start()
+
+        cmd = [self.player_cmd, sound_file] if self.player_cmd != "canberra-gtk-play" else [self.player_cmd, "-f", sound_file]
+        try:
+            self._audio_queue.put_nowait(cmd)
+        except queue.Full:
+            pass
 
 
 audio_manager = SoundManager()

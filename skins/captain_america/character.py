@@ -1,4 +1,4 @@
-"""Captain America character: star-spangled armor, Vibranium Shield throws, and defensive block."""
+"""Captain America character: tactical armor, screen-wide ricocheting Vibranium shield, and combat stances."""
 
 import math
 import random
@@ -8,11 +8,12 @@ from typing import Tuple, Dict, Any
 from skins.base import BaseCharacter, CharacterState
 from skins.manager import skin_manager
 from skins.captain_america.shield import VibraniumShield
-from core.particles import ParticleManager
+from core.projectiles import DesktopProjectileWindow
+from core.particles import ParticleManager, CYAN_GLOW
 
 
 class CaptainAmericaCharacter(BaseCharacter):
-    """Steve Rogers with star-spangled uniform, defensive stances, and ricocheting shield."""
+    """Steve Rogers with star-spangled uniform, defensive stances, and screen-wide ricocheting shield."""
 
     def __init__(self, x: float = 500.0, y: float = 400.0):
         super().__init__(x, y, skin_id="captain_america")
@@ -20,7 +21,8 @@ class CaptainAmericaCharacter(BaseCharacter):
         self.shield = VibraniumShield(x - 12.0, y + 2.0)
         self.is_blocking = False
         self.block_end = 0.0
-        self.action_timer = time.time() + random.uniform(3.5, 7.0)
+        self.action_timer = time.time() + random.uniform(4.0, 8.0)
+        self.hitbox_radius = 46.0
 
     def get_shield_hand_pos(self) -> Tuple[float, float]:
         dir_mult = 1.0 if self.facing_right else -1.0
@@ -38,16 +40,31 @@ class CaptainAmericaCharacter(BaseCharacter):
         audio_mgr: Any
     ) -> bool:
         hand_x, hand_y = self.get_shield_hand_pos()
-        if ability_name == "shield_throw":
+        if ability_name in ("shield_throw", "signature"):
             if self.shield.state == "HELD":
-                self.shield.throw(hand_x, hand_y, target_x, target_y)
-                particle_mgr.burst_sparks(hand_x, hand_y, count=6, color=(0.9, 0.9, 1.0))
+                self.shield.state = "THROWN"
+
+                def _on_catch():
+                    self.shield.state = "HELD"
+                    particle_mgr.burst_sparks(self.x, self.y, count=12)
+
+                DesktopProjectileWindow(
+                    proj_type="shield",
+                    start_x=hand_x,
+                    start_y=hand_y,
+                    target_x=target_x,
+                    target_y=target_y,
+                    owner_getter=self.get_shield_hand_pos,
+                    on_catch=_on_catch,
+                    speed=26.0
+                )
                 audio_mgr.play("smash")
+                particle_mgr.burst_sparks(hand_x, hand_y, count=8)
                 return True
         elif ability_name == "shield_block":
             self.is_blocking = True
             self.block_end = time.time() + 1.2
-            particle_mgr.shockwave(hand_x, hand_y, max_radius=40.0, color=(0.4, 0.6, 1.0))
+            particle_mgr.shockwave(hand_x, hand_y, max_radius=45.0, color=(0.4, 0.6, 1.0))
             audio_mgr.play("smash")
             return True
         elif ability_name == "hero_pose":
@@ -84,172 +101,196 @@ class CaptainAmericaCharacter(BaseCharacter):
 
         # Random personality events
         if now >= self.action_timer and activity > 0.1:
-            self.action_timer = now + random.uniform(4.0, 8.0) / max(0.2, activity)
+            self.action_timer = now + random.uniform(5.0, 9.0) / max(0.2, activity)
             roll = random.random()
-            if roll < 0.45:
+            if roll < 0.50:
                 self.trigger_ability("shield_throw", cursor_x, cursor_y, particle_mgr, audio_mgr)
-            elif roll < 0.70:
+            elif roll < 0.75:
                 self.trigger_ability("shield_block", cursor_x, cursor_y, particle_mgr, audio_mgr)
-            elif roll < 0.85:
+            elif roll < 0.90:
                 self.trigger_ability("hero_pose", cursor_x, cursor_y, particle_mgr, audio_mgr)
 
-        # Ground movement physics
+        # Ground sprint & run physics
         speed_mult = config_data.get("speed", 1.0)
-        max_spd = 12.0 * speed_mult
-        accel = 0.60 * speed_mult
+        max_spd = 14.0 * speed_mult
+        accel = 0.75 * speed_mult
 
-        # Apply gravity
-        if self.y < ground_y:
-            self.vy += 0.75
-            self.is_airborne = True
+        tx = cursor_x - (40.0 if self.facing_right else -40.0)
+        ty = ground_y
+        dx = tx - self.x
+        dy = ty - self.y
+        dist = abs(dx)
+
+        if dist > 25.0:
+            self.vx += (1.0 if dx > 0 else -1.0) * min(dist * 0.08, accel)
+            self.state = CharacterState.RUN
+            # Dust puffs when sprinting
+            if random.random() < 0.2:
+                particle_mgr.smoke_puff(self.x, self.y + 24, count=1)
         else:
-            self.y = ground_y
-            self.vy = 0.0
-            self.is_airborne = False
-
-        # Horizontal cursor follow
-        dx = cursor_x - self.x
-        dist_x = abs(dx)
-
-        if dist_x > 70.0 and config_data.get("cursor_follow", True) and not self.is_blocking:
-            dir_x = 1.0 if dx > 0 else -1.0
-            self.vx += dir_x * accel
-            if not self.is_airborne:
-                self.state = CharacterState.RUN if dist_x > 200.0 else CharacterState.WALK
-        else:
-            self.vx *= 0.84
-            if not self.is_airborne and self.state != CharacterState.VICTORY:
-                self.state = CharacterState.IDLE
+            self.state = CharacterState.IDLE
+            self.vx *= 0.82
 
         self.vx *= 0.88
-        if abs(self.vx) > max_spd:
-            self.vx = (self.vx / abs(self.vx)) * max_spd
+        self.vy = 0.0
+
+        spd = abs(self.vx)
+        if spd > max_spd:
+            self.vx = (self.vx / spd) * max_spd
 
         self.x += self.vx
-        self.y += self.vy
+        self.y = ground_y
 
         # Screen boundary clamp
         self.x = max(min_x + 50.0, min(min_x + screen_w - 50.0, self.x))
-        self.y = min(ground_y, max(min_y + 50.0, self.y))
-
-        # Update shield
-        hand_x, hand_y = self.get_shield_hand_pos()
-        self.shield.update(hand_x, hand_y, screen_bounds, particle_mgr)
 
     def draw(self, ctx: cairo.Context, particle_mgr: ParticleManager) -> None:
         ctx.save()
-
-        # Render shield if thrown
-        if self.shield.state != "HELD":
-            self.shield.draw(ctx)
-
         ctx.translate(self.x, self.y)
         ctx.scale(self.scale, self.scale)
         if not self.facing_right:
             ctx.scale(-1.0, 1.0)
 
-        # 1. Legs & Red Boots
-        ctx.set_source_rgb(0.12, 0.28, 0.65)  # Navy uniform pants
-        ctx.rectangle(-7, 12, 5, 14)
-        ctx.rectangle(2, 12, 5, 14)
+        # Running leg stride animation
+        spd = abs(self.vx)
+        leg_stride = math.sin(self.anim_time * 12.0) * 8.0 if spd > 2.0 else 0.0
+
+        # 1. Legs & Crimson Combat Boots
+        pat_pants = cairo.LinearGradient(0, 10, 0, 26)
+        pat_pants.add_color_stop_rgb(0.0, 0.14, 0.25, 0.52)
+        pat_pants.add_color_stop_rgb(1.0, 0.08, 0.15, 0.35)
+
+        # Left Leg
+        ctx.set_source(pat_pants)
+        ctx.rectangle(-7 - leg_stride * 0.5, 12, 5.5, 14)
         ctx.fill()
-        # Red Combat Boots
-        ctx.set_source_rgb(0.85, 0.12, 0.15)
-        ctx.rectangle(-8, 22, 6, 6)
-        ctx.rectangle(1, 22, 6, 6)
+        # Right Leg
+        ctx.rectangle(2 + leg_stride * 0.5, 12, 5.5, 14)
         ctx.fill()
 
-        # 2. Torso with Red/White Abdominal Stripes
-        ctx.set_source_rgb(0.12, 0.28, 0.65)
-        ctx.rectangle(-10, -10, 20, 22)
+        # Crimson Combat Boots with Tread
+        ctx.set_source_rgb(0.80, 0.12, 0.16)
+        ctx.rectangle(-8 - leg_stride * 0.5, 22, 6.5, 7)
+        ctx.rectangle(1 + leg_stride * 0.5, 22, 6.5, 7)
+        ctx.fill()
+        ctx.set_source_rgb(0.20, 0.05, 0.05)
+        ctx.rectangle(-8 - leg_stride * 0.5, 27, 6.5, 2)
+        ctx.rectangle(1 + leg_stride * 0.5, 27, 6.5, 2)
         ctx.fill()
 
-        # Red & White stripes on stomach
-        for i, col in enumerate([(0.85, 0.12, 0.15), (1.0, 1.0, 1.0), (0.85, 0.12, 0.15), (1.0, 1.0, 1.0), (0.85, 0.12, 0.15)]):
+        # 2. Torso with Red/White Abdominal Armor Stripes
+        pat_chest = cairo.LinearGradient(0, -12, 0, 12)
+        pat_chest.add_color_stop_rgb(0.0, 0.16, 0.32, 0.65)
+        pat_chest.add_color_stop_rgb(1.0, 0.08, 0.18, 0.42)
+        ctx.set_source(pat_chest)
+        ctx.rectangle(-11, -11, 22, 23)
+        ctx.fill()
+
+        # Red & White Tactical Stripes on Abdomen
+        stripe_cols = [(0.85, 0.12, 0.15), (0.95, 0.95, 0.95), (0.85, 0.12, 0.15), (0.95, 0.95, 0.95), (0.85, 0.12, 0.15)]
+        for i, col in enumerate(stripe_cols):
             ctx.set_source_rgb(col[0], col[1], col[2])
-            ctx.rectangle(-8 + i * 3.2, 3, 3.2, 9)
+            ctx.rectangle(-8.5 + i * 3.4, 2, 3.4, 10)
             ctx.fill()
 
-        # Brown Leather Utility Belt & Harness
-        ctx.set_source_rgb(0.35, 0.20, 0.10)
-        ctx.rectangle(-10, 11, 20, 3)
+        # Brown Leather Utility Belt & Tactical Buckles
+        ctx.set_source_rgb(0.32, 0.18, 0.10)
+        ctx.rectangle(-11, 11, 22, 3.5)
+        ctx.fill()
+        ctx.set_source_rgb(0.85, 0.75, 0.20)
+        ctx.rectangle(-2.5, 10.5, 5, 4.5)
         ctx.fill()
 
-        # White Star on Chest
+        # White Star Insignia on Chest
         ctx.set_source_rgb(1.0, 1.0, 1.0)
         ctx.new_path()
-        r_out = 4.5
-        r_in = 2.0
+        r_out = 5.0
+        r_in = 2.2
         for i in range(5):
             ang = -math.pi / 2 + i * (2 * math.pi / 5)
             x1 = math.cos(ang) * r_out
-            y1 = -4 + math.sin(ang) * r_out
+            y1 = -4.5 + math.sin(ang) * r_out
             if i == 0:
                 ctx.move_to(x1, y1)
             else:
                 ctx.line_to(x1, y1)
             ang_in = ang + (math.pi / 5)
             x2 = math.cos(ang_in) * r_in
-            y2 = -4 + math.sin(ang_in) * r_in
+            y2 = -4.5 + math.sin(ang_in) * r_in
             ctx.line_to(x2, y2)
         ctx.close_path()
         ctx.fill()
 
-        # 3. Arms & Hands
-        ctx.set_source_rgb(0.12, 0.28, 0.65)
-        ctx.rectangle(-14, -8, 4, 15)
-        ctx.rectangle(10, -8, 4, 15)
+        # 3. Arms & Tactical Red Gauntlets
+        ctx.set_source(pat_chest)
+        ctx.rectangle(-15, -8, 4.5, 15)
+        ctx.rectangle(10, -8, 4.5, 15)
         ctx.fill()
-        # Red gauntlet gloves
-        ctx.set_source_rgb(0.85, 0.12, 0.15)
-        ctx.rectangle(-14, 3, 4, 6)
-        ctx.rectangle(10, 3, 4, 6)
-        ctx.fill()
-
-        # 4. Helmet with 'A' and Wings
-        ctx.set_source_rgb(0.12, 0.28, 0.65)
-        ctx.arc(0, -18, 9, 0, 2 * math.pi)
+        # Red Combat Gauntlets
+        ctx.set_source_rgb(0.80, 0.12, 0.16)
+        ctx.rectangle(-15, 3, 4.5, 7)
+        ctx.rectangle(10, 3, 4.5, 7)
         ctx.fill()
 
-        # White 'A' on forehead
+        # 4. Cowl Helmet with Embossed 'A' and Wings
+        ctx.set_source(pat_chest)
+        ctx.arc(0, -18, 9.5, 0, 2 * math.pi)
+        ctx.fill()
+
+        # Jawline / Flesh Face
+        ctx.set_source_rgb(0.95, 0.78, 0.65)
+        ctx.rectangle(-5.5, -16, 11, 7.5)
+        ctx.fill()
+
+        # Crisp White 'A' on Brow
         ctx.set_source_rgb(1.0, 1.0, 1.0)
-        ctx.set_line_width(1.5)
-        ctx.move_to(-2.5, -15)
-        ctx.line_to(0, -22)
-        ctx.line_to(2.5, -15)
-        ctx.move_to(-1.8, -18)
-        ctx.line_to(1.8, -18)
+        ctx.set_line_width(1.6)
+        ctx.move_to(-2.8, -15.5)
+        ctx.line_to(0, -22.5)
+        ctx.line_to(2.8, -15.5)
+        ctx.move_to(-1.8, -18.5)
+        ctx.line_to(1.8, -18.5)
         ctx.stroke()
 
-        # Silver helmet wings
-        ctx.set_source_rgb(0.9, 0.92, 0.96)
-        ctx.new_path()
-        ctx.move_to(-7, -19)
-        ctx.line_to(-12, -23)
-        ctx.line_to(-8, -17)
-        ctx.close_path()
-        ctx.fill()
+        # Silver Helmet Wing Accents
+        ctx.set_source_rgb(0.92, 0.94, 0.98)
+        for side in [-1, 1]:
+            ctx.new_path()
+            ctx.move_to(side * 6.5, -19)
+            ctx.line_to(side * 11.5, -23.5)
+            ctx.line_to(side * 7.5, -16.5)
+            ctx.close_path()
+            ctx.fill()
 
-        ctx.new_path()
-        ctx.move_to(7, -19)
-        ctx.line_to(12, -23)
-        ctx.line_to(8, -17)
-        ctx.close_path()
-        ctx.fill()
-
-        # 5. Held Shield
+        # 5. Held Vibranium Shield
         if self.shield.state == "HELD":
             ctx.save()
             if self.is_blocking:
-                ctx.translate(12, -2)
-                ctx.scale(0.8, 1.0)
+                ctx.translate(14, -2)
+                ctx.scale(0.85, 1.0)
             else:
-                ctx.translate(-10, 4)
-                ctx.scale(0.5, 1.0)
-            self.shield.draw(ctx)
+                ctx.translate(-11, 4)
+                ctx.scale(0.55, 1.0)
+
+            # Draw Vibranium Shield with concentric rings
+            ctx.set_source_rgb(0.85, 0.12, 0.15)
+            ctx.arc(0, 0, 16, 0, 2 * math.pi)
+            ctx.fill()
+            ctx.set_source_rgb(0.92, 0.94, 0.98)
+            ctx.arc(0, 0, 12, 0, 2 * math.pi)
+            ctx.fill()
+            ctx.set_source_rgb(0.85, 0.12, 0.15)
+            ctx.arc(0, 0, 8.5, 0, 2 * math.pi)
+            ctx.fill()
+            ctx.set_source_rgb(0.12, 0.28, 0.72)
+            ctx.arc(0, 0, 5.5, 0, 2 * math.pi)
+            ctx.fill()
+            # Star
+            ctx.set_source_rgb(1.0, 1.0, 1.0)
+            ctx.arc(0, 0, 2.5, 0, 2 * math.pi)
+            ctx.fill()
             ctx.restore()
 
-        ctx.restore()
         ctx.restore()
 
 

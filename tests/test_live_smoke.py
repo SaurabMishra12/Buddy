@@ -64,6 +64,31 @@ class TestLiveDisplaySmoke(unittest.TestCase):
 
         self.assertGreaterEqual(ticks_counted, max_ticks)
 
+    def test_superhero_live_smoke(self):
+        """Smoke test verifying Thanos, Superman, Ironman, Hulk, and Cap in live GTK loop."""
+        engine = BuddyEngine(requested_skin="thanos", debug_mode=False)
+        skins_to_test = ["thanos", "superman", "ironman", "hulk", "captain_america"]
+        tick = 0
+        skin_idx = 0
+
+        def step():
+            nonlocal tick, skin_idx
+            tick += 1
+            if tick % 15 == 0:
+                skin_idx += 1
+                if skin_idx < len(skins_to_test):
+                    engine.switch_skin(skins_to_test[skin_idx])
+                    engine.trigger_signature_ability()
+                else:
+                    Gtk.main_quit()
+                    return False
+            return True
+
+        GLib.timeout_add(16, step)
+        engine.window.show()
+        Gtk.main()
+        self.assertEqual(skin_idx, len(skins_to_test))
+
 
 if __name__ == "__main__":
     unittest.main()

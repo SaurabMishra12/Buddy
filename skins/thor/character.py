@@ -11,6 +11,7 @@ from skins.manager import skin_manager
 from skins.thor.cape import Cape
 from skins.thor.hammer import Mjolnir
 from core.particles import ParticleManager, CYAN_GLOW
+from core.projectiles import DesktopProjectileWindow
 
 
 class ThorCharacter(BaseCharacter):
@@ -54,7 +55,27 @@ class ThorCharacter(BaseCharacter):
         hand_x, hand_y = self.get_hand_pos()
         if ability_name in ("hammer_throw", "attack"):
             if self.mjolnir.state == "HELD":
-                self.mjolnir.throw(hand_x, hand_y, target_x, target_y, mode="boomerang")
+                self.mjolnir.state = "DESKTOP_THROWN"
+                self.state = "SUMMONING"
+                self.is_summoning = True
+
+                def _on_catch():
+                    self.mjolnir.state = "HELD"
+                    self.is_summoning = False
+                    self.state = CharacterState.IDLE
+                    particle_mgr.burst_sparks(self.x, self.y, count=20, color=CYAN_GLOW)
+                    particle_mgr.shockwave(self.x, self.y, max_radius=65.0)
+
+                DesktopProjectileWindow(
+                    proj_type="mjolnir",
+                    start_x=hand_x,
+                    start_y=hand_y,
+                    target_x=target_x,
+                    target_y=target_y,
+                    owner_getter=self.get_hand_pos,
+                    on_catch=_on_catch,
+                    speed=28.0
+                )
                 self.thrown_time = time.time()
                 particle_mgr.burst_sparks(hand_x, hand_y, count=16, color=CYAN_GLOW)
                 audio_mgr.play("lightning")
@@ -190,21 +211,22 @@ class ThorCharacter(BaseCharacter):
             particle_mgr.burst_sparks(self.x, self.y, count=1, color=CYAN_GLOW)
 
         # Update Mjolnir (passing Thor coordinates for bounded orbit)
-        catch_event = self.mjolnir.update(
-            hand_x,
-            hand_y,
-            cursor_x,
-            cursor_y,
-            screen_w,
-            screen_h,
-            particle_mgr,
-            thor_x=self.x,
-            thor_y=self.y
-        )
-        if catch_event == "CAUGHT":
-            self.is_summoning = False
-            self.state = CharacterState.IDLE
-            self.play_timer = now + random.uniform(5.0, 9.0) / max(0.2, config_data.get("activity_level", 1.0))
+        if self.mjolnir.state != "DESKTOP_THROWN":
+            catch_event = self.mjolnir.update(
+                hand_x,
+                hand_y,
+                cursor_x,
+                cursor_y,
+                screen_w,
+                screen_h,
+                particle_mgr,
+                thor_x=self.x,
+                thor_y=self.y
+            )
+            if catch_event == "CAUGHT":
+                self.is_summoning = False
+                self.state = CharacterState.IDLE
+                self.play_timer = now + random.uniform(5.0, 9.0) / max(0.2, config_data.get("activity_level", 1.0))
 
     def draw(self, ctx: cairo.Context, particle_mgr: ParticleManager) -> None:
         ctx.save()
@@ -443,7 +465,8 @@ class ThorCharacter(BaseCharacter):
         ctx.restore()
 
         # 3. Airborne Mjolnir (Orbiting / Thrown / Returning)
-        self.mjolnir.draw(ctx)
+        if self.mjolnir.state != "DESKTOP_THROWN":
+            self.mjolnir.draw(ctx)
 
         ctx.restore()
 
