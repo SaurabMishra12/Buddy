@@ -156,9 +156,29 @@ def main():
             print("No running Buddy instance found.")
             return
 
-    if args.skin and send_daemon_command({"action": "switch_skin", "skin_id": args.skin}):
-        print(f"Switched running Buddy to skin: {args.skin}")
+    target_skin = skin_manager.normalize_skin_id(args.skin) if args.skin else None
+
+    if target_skin and send_daemon_command({"action": "switch_skin", "skin_id": target_skin}):
+        print(f"⚡ Switched running Buddy to skin: {target_skin.upper()}")
         return
+
+    # If already running without extra args, open skins gallery dialog
+    if not target_skin and not args.pause and not args.resume and not args.settings and not args.skins and not args.quit:
+        if send_daemon_command({"action": "skins"}):
+            print("⚡ Buddy is already running on desktop! Opened Character Skin Gallery.")
+            return
+
+    # Clean up stale previous process if socket was dead but process hung
+    if PID_FILE.exists():
+        try:
+            import time
+            old_pid = int(PID_FILE.read_text().strip())
+            os.kill(old_pid, 0)
+            print(f"Cleaning up previous Buddy process (PID {old_pid})...")
+            os.kill(old_pid, signal.SIGTERM)
+            time.sleep(0.3)
+        except Exception:
+            pass
 
     # SIGHUP and SIGTERM handling
     if hasattr(signal, "SIGHUP"):

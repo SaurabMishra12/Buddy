@@ -203,7 +203,8 @@ class OverlayWindow:
         on_draw: Callable,
         on_button_press: Optional[Callable] = None,
         on_button_release: Optional[Callable] = None,
-        on_motion: Optional[Callable] = None
+        on_motion: Optional[Callable] = None,
+        on_scroll: Optional[Callable] = None
     ):
         self.win_size = WIN_SIZE
         self.half_size = HALF_SIZE
@@ -269,6 +270,7 @@ class OverlayWindow:
             | Gdk.EventMask.BUTTON_RELEASE_MASK
             | Gdk.EventMask.BUTTON1_MOTION_MASK
             | Gdk.EventMask.POINTER_MOTION_MASK
+            | Gdk.EventMask.SCROLL_MASK
         )
 
         def _on_destroy(widget):
@@ -283,6 +285,8 @@ class OverlayWindow:
             self.window.connect("button-release-event", on_button_release)
         if on_motion:
             self.window.connect("motion-notify-event", on_motion)
+        if on_scroll:
+            self.window.connect("scroll-event", on_scroll)
 
         self.click_through = False
 

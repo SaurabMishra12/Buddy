@@ -47,6 +47,10 @@ class TestLiveDisplaySmoke(unittest.TestCase):
                 self.assertTrue(success)
                 self.assertEqual(engine.character.skin_id, "cat")
 
+            # At tick 55, restore skin to thor
+            if ticks_counted == 55:
+                engine.switch_skin("thor")
+
             if ticks_counted >= max_ticks:
                 Gtk.main_quit()
                 return False

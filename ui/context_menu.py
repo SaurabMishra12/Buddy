@@ -15,6 +15,11 @@ def show_context_menu(engine, event: Gdk.EventButton):
     sig_item.connect("activate", lambda _: engine.trigger_signature_ability())
     menu.append(sig_item)
 
+    # Quick skin cycling
+    next_item = Gtk.MenuItem(label="➡️ Next Character (Scroll / Middle-Click)")
+    next_item.connect("activate", lambda _: engine.next_skin())
+    menu.append(next_item)
+
     menu.append(Gtk.SeparatorMenuItem())
 
     # 2. Change Skin Submenu

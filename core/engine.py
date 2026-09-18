@@ -32,7 +32,8 @@ class BuddyEngine:
             on_draw=self.on_draw,
             on_button_press=self.on_button_press,
             on_button_release=self.on_button_release,
-            on_motion=self.on_motion
+            on_motion=self.on_motion,
+            on_scroll=self.on_scroll
         )
 
         # Particle, Audio, and Screen shake managers
@@ -44,7 +45,9 @@ class BuddyEngine:
         self.shake = ScreenShake()
 
         # Instantiate character at screen center
-        active_skin_id = requested_skin or self.config.get("skin", "thor")
+        raw_skin = requested_skin or self.config.get("skin", "thor")
+        active_skin_id = skin_manager.normalize_skin_id(raw_skin)
+
         init_x = self.window.screen_w * 0.5
         init_y = self.window.screen_h * 0.4
         self.character: BaseCharacter = skin_manager.create_character(
@@ -53,6 +56,7 @@ class BuddyEngine:
             y=init_y
         )
         self.character.scale = self.config.get("scale", 1.0)
+        self.config.set("skin", active_skin_id)
 
         # Sync click-through: In Oneko floating window, character hitbox is clickable
         # while everything outside passes through cleanly.
@@ -95,23 +99,90 @@ class BuddyEngine:
         GLib.timeout_add(self.frame_interval_ms, self.on_tick)
 
     def switch_skin(self, skin_id: str) -> bool:
-        """Dynamically switch to a different character."""
-        meta = skin_manager.get_metadata(skin_id)
+        """Dynamically switch to a different character with character-specific fanfare."""
+        norm_id = skin_manager.normalize_skin_id(skin_id)
+        meta = skin_manager.get_metadata(norm_id)
         if not meta:
-            print(f"[Buddy Engine] Warning: Skin '{skin_id}' not found, ignoring switch.")
+            print(f"[Buddy Engine] Warning: Skin '{skin_id}' (normalized: '{norm_id}') not found, ignoring switch.")
             return False
 
         old_x, old_y = self.character.x, self.character.y
         self.particles.clear()
-        self.character = skin_manager.create_character(skin_id, x=old_x, y=old_y)
+        self.character = skin_manager.create_character(norm_id, x=old_x, y=old_y)
         self.character.scale = self.config.get("scale", 1.0)
-        self.config.set("skin", skin_id)
+        self.config.set("skin", norm_id)
 
-        # Arrival celebration effect for new skin
-        self.particles.burst_sparks(old_x, old_y, count=30)
-        self.audio.play("magic")
-        print(f"[Buddy Engine] Switched to skin: {skin_id}")
+        # Character-specific arrival celebrations!
+        if norm_id == "thor":
+            self.window.trigger_sky_strike(old_x, old_y)
+            self.particles.burst_sparks(old_x, old_y, count=35, color=CYAN_GLOW)
+            self.particles.shockwave(old_x, old_y, max_radius=80.0)
+            self.audio.play("lightning")
+        elif norm_id == "superman":
+            self.particles.shockwave(old_x, old_y, max_radius=80.0, color=(0.85, 0.95, 1.0))
+            self.particles.burst_sparks(old_x, old_y, count=25, color=(1.0, 0.2, 0.2))
+            self.audio.play("jet")
+        elif norm_id == "dragon":
+            self.particles.shockwave(old_x, old_y, max_radius=75.0, color=(1.0, 0.4, 0.0))
+            self.audio.play("roar")
+        elif norm_id == "ironman":
+            self.particles.shockwave(old_x, old_y, max_radius=70.0, color=(0.2, 0.8, 1.0))
+            self.particles.burst_sparks(old_x, old_y, count=20, color=(1.0, 0.5, 0.1))
+            self.audio.play("laser")
+        elif norm_id == "hulk":
+            self.particles.shockwave(old_x, old_y, max_radius=90.0, color=(0.2, 0.9, 0.2))
+            self.audio.play("roar")
+        elif norm_id == "cat":
+            self.particles.burst_sparks(old_x, old_y, count=15, color=(1.0, 0.4, 0.7))
+            self.audio.play("purr")
+        elif norm_id == "dog":
+            self.particles.burst_sparks(old_x, old_y, count=15, color=(1.0, 0.8, 0.2))
+            self.audio.play("bark")
+        elif norm_id == "harry_potter":
+            for _ in range(25):
+                self.particles.burst_sparks(old_x, old_y, count=2, color=(0.8, 0.8, 1.0))
+            self.audio.play("magic")
+        elif norm_id == "captain_america":
+            self.particles.shockwave(old_x, old_y, max_radius=60.0, color=(0.8, 0.1, 0.1))
+            self.audio.play("laser")
+        elif norm_id == "thanos":
+            self.particles.shockwave(old_x, old_y, max_radius=95.0, color=(0.7, 0.1, 0.9))
+            self.audio.play("magic")
+        elif norm_id == "batman":
+            self.particles.shockwave(old_x, old_y, max_radius=60.0, color=(0.3, 0.3, 0.35))
+            self.audio.play("swoosh")
+        else:
+            self.particles.burst_sparks(old_x, old_y, count=20)
+            self.audio.play("magic")
+
+        print(f"[Buddy Engine] Switched to skin: {norm_id.upper()}")
         return True
+
+    def next_skin(self) -> str:
+        """Cycle to the next available character skin."""
+        skins = [s["id"] for s in skin_manager.get_available_skins()]
+        if not skins:
+            return self.character.skin_id
+        try:
+            idx = skins.index(self.character.skin_id)
+            next_id = skins[(idx + 1) % len(skins)]
+        except ValueError:
+            next_id = skins[0]
+        self.switch_skin(next_id)
+        return next_id
+
+    def prev_skin(self) -> str:
+        """Cycle to the previous available character skin."""
+        skins = [s["id"] for s in skin_manager.get_available_skins()]
+        if not skins:
+            return self.character.skin_id
+        try:
+            idx = skins.index(self.character.skin_id)
+            prev_id = skins[(idx - 1) % len(skins)]
+        except ValueError:
+            prev_id = skins[0]
+        self.switch_skin(prev_id)
+        return prev_id
 
     def toggle_pause(self) -> bool:
         """Pause or resume Buddy."""
@@ -145,6 +216,11 @@ class BuddyEngine:
             self.particles.shockwave(cx, cy, max_radius=80.0)
             self.audio.play("lightning")
             self.character.trigger_ability("hammer_spin", cx, cy, self.particles, self.audio)
+        elif skin_id == "superman":
+            self.character.trigger_ability("heat_vision", self.cursor_x, self.cursor_y, self.particles, self.audio)
+            self.character.trigger_ability("supersonic_flight", self.cursor_x, self.cursor_y, self.particles, self.audio)
+            self.particles.shockwave(cx, cy, max_radius=80.0, color=(1.0, 0.3, 0.1))
+            self.audio.play("laser")
         elif skin_id == "dragon":
             self.particles.shockwave(cx, cy, max_radius=75.0, color=(1.0, 0.4, 0.0))
             self.particles.flame_breath(cx, cy, cx + (50 if self.character.facing_right else -50), cy)
@@ -176,9 +252,6 @@ class BuddyEngine:
         elif skin_id == "batman":
             self.character.trigger_ability("smoke_bomb", cx, cy, self.particles, self.audio)
             self.audio.play("swoosh")
-        elif skin_id == "superman":
-            self.character.trigger_ability("heat_vision", cx, cy, self.particles, self.audio)
-            self.audio.play("laser")
         else:
             self.particles.burst_sparks(cx, cy, count=15)
             self.audio.play("magic")
@@ -329,13 +402,18 @@ class BuddyEngine:
             self.trigger_signature_ability()
             return True
 
-        # 2. Right-click: Open interactive options context menu
+        # 2. Middle-click (Button 2): Transform directly to next skin!
+        if event.button == 2:
+            self.next_skin()
+            return True
+
+        # 3. Right-click: Open interactive options context menu
         if event.button == 3:
             from ui.context_menu import show_context_menu
             show_context_menu(self, event)
             return True
 
-        # 3. Left-click: Start drag
+        # 4. Left-click: Start drag
         if event.button == 1:
             self.is_dragging = True
             self.is_chasing = False
@@ -347,6 +425,8 @@ class BuddyEngine:
                 self.audio.play("purr")
             elif self.character.skin_id == "dog":
                 self.audio.play("bark")
+            elif self.character.skin_id == "superman":
+                self.audio.play("jet")
             else:
                 self.audio.play("magic")
 
@@ -375,6 +455,16 @@ class BuddyEngine:
                 return True
             except Exception:
                 pass
+        return False
+
+    def on_scroll(self, widget: Gtk.Widget, event: Gdk.EventScroll) -> bool:
+        """Cycle character skins using mouse scroll wheel directly over pet."""
+        if event.direction == Gdk.ScrollDirection.UP:
+            self.prev_skin()
+            return True
+        elif event.direction == Gdk.ScrollDirection.DOWN:
+            self.next_skin()
+            return True
         return False
 
     def run(self) -> None:

@@ -61,17 +61,36 @@ class SkinManager:
                     pass
             self._metadata_cache[skin_id] = meta
 
+    @staticmethod
+    def normalize_skin_id(skin_id: str) -> str:
+        """Normalize skin name to canonical lowercase ID."""
+        if not skin_id:
+            return "thor"
+        raw = str(skin_id).lower().strip().replace("-", "_").replace(" ", "_")
+        aliases = {
+            "iron_man": "ironman",
+            "super_man": "superman",
+            "captainamerica": "captain_america",
+            "harrypotter": "harry_potter",
+            "harry": "harry_potter",
+            "potter": "harry_potter",
+            "cap": "captain_america"
+        }
+        return aliases.get(raw, raw)
+
     def get_available_skins(self) -> List[Dict[str, Any]]:
         """Return list of all registered skins metadata."""
         return list(self._metadata_cache.values())
 
     def get_metadata(self, skin_id: str) -> Optional[Dict[str, Any]]:
-        """Return metadata for specific skin ID."""
-        return self._metadata_cache.get(skin_id)
+        """Return metadata for specific skin ID with case-insensitive normalization."""
+        norm_id = self.normalize_skin_id(skin_id)
+        return self._metadata_cache.get(norm_id)
 
     def create_character(self, skin_id: str, x: float = 500.0, y: float = 400.0) -> BaseCharacter:
         """Instantiate character for specified skin ID with fallback to Thor if missing."""
-        target_id = skin_id if skin_id in self._registry else "thor"
+        norm_id = self.normalize_skin_id(skin_id)
+        target_id = norm_id if norm_id in self._registry else "thor"
         cls = self._registry.get(target_id)
         if not cls:
             # Fallback import of thor character if registry not populated yet
