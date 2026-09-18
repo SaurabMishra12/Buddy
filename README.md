@@ -44,8 +44,8 @@
 Clone the repository and run the automated installer:
 
 ```bash
-git clone https://github.com/buddy/buddy.git
-cd buddy
+git clone https://github.com/SaurabMishra12/Buddy.git
+cd Buddy
 ./install.sh
 ```
 
@@ -92,9 +92,10 @@ buddy --quit           # Close Buddy
 
 | Action | Control | Description |
 |---|---|---|
-| **Context Menu** | Right-Click Buddy / Tray | Switch skins, toggle pause, trigger abilities, open settings |
-| **Pet / Drag** | Left-Click & Drag (Interactive Mode) | Pick up and move Buddy around the screen |
-| **System Tray** | Click Tray Icon | Quick access to character switcher and preferences |
+| **Pet / Drag** | Left-Click & Drag | Pick up and move Buddy anywhere across the screen with custom drag animations and trail particles |
+| **Signature Move** | Double-Click Pet | Executes the character's signature special move (Thor sky strike & spin, Dragon fire circle, Cat flip, etc.) |
+| **Context Menu** | Right-Click Pet | Popup menu with instant skin switcher (11 skins), abilities, size scaling, pause, and settings |
+| **System Tray** | Click Tray Icon | Quick access to character switcher, pause, and preferences |
 | **Developer HUD** | `--debug` CLI flag | Displays real-time FPS, coordinates, velocity, and state |
 
 ---

@@ -1,6 +1,7 @@
 """Core desktop pet engine: GLib animation tick loop, layer rendering, and character coordinator."""
 
 import time
+import math
 import cairo
 from typing import Optional, Dict, Any
 
@@ -11,11 +12,11 @@ from gi.repository import Gtk, Gdk, GLib
 
 from core.config import config
 from core.window import OverlayWindow
-from core.particles import ParticleManager
+from core.particles import ParticleManager, CYAN_GLOW
 from core.audio import audio_manager
 from core.physics import ScreenShake
 from skins.manager import skin_manager
-from skins.base import BaseCharacter
+from skins.base import BaseCharacter, CharacterState
 
 
 class BuddyEngine:
@@ -26,7 +27,7 @@ class BuddyEngine:
         self.debug_mode = debug_mode or self.config.get("debug_mode", False)
         self.paused = False
 
-        # Display and window initialization
+        # Oneko-style floating companion window (180x180)
         self.window = OverlayWindow(
             on_draw=self.on_draw,
             on_button_press=self.on_button_press,
@@ -42,17 +43,20 @@ class BuddyEngine:
         self.audio.volume = self.config.get("sound_volume", 0.7)
         self.shake = ScreenShake()
 
-        # Instantiate character
+        # Instantiate character at screen center
         active_skin_id = requested_skin or self.config.get("skin", "thor")
+        init_x = self.window.screen_w * 0.5
+        init_y = self.window.screen_h * 0.4
         self.character: BaseCharacter = skin_manager.create_character(
             active_skin_id,
-            x=self.window.bounds[0] + self.window.bounds[2] * 0.5,
-            y=self.window.bounds[1] + self.window.bounds[3] * 0.4
+            x=init_x,
+            y=init_y
         )
         self.character.scale = self.config.get("scale", 1.0)
 
-        # Sync click-through setting
-        self.click_through = self.config.get("click_through", True)
+        # Sync click-through: In Oneko floating window, character hitbox is clickable
+        # while everything outside passes through cleanly.
+        self.click_through = self.config.get("click_through", False)
         self.window.set_click_through(self.click_through)
 
         # Mouse tracking
@@ -65,6 +69,16 @@ class BuddyEngine:
         self.drag_offset_x = 0.0
         self.drag_offset_y = 0.0
 
+        # Special ability spin state
+        self.is_spinning = False
+        self.spin_end_time = 0.0
+
+        # Smart hysteresis deadzone (False = calm/idle near cursor; True = chasing far cursor)
+        self.is_chasing = False
+
+        # Position window over initial character coordinates
+        self.window.move_to(self.character.x, self.character.y)
+
         # FPS Pacing and performance monitoring
         self.target_fps = 30 if self.config.get("low_power_mode", False) else self.config.get("fps", 60)
         self.frame_interval_ms = int(1000 / self.target_fps)
@@ -74,9 +88,10 @@ class BuddyEngine:
         self.fps_timer = time.time()
 
         # Arrival effect!
-        self.particles.sky_strike(self.character.x, self.character.y)
+        self.particles.burst_sparks(self.character.x, self.character.y, count=25)
 
-        # Start main animation tick
+        # Show window & start main animation tick
+        self.window.show()
         GLib.timeout_add(self.frame_interval_ms, self.on_tick)
 
     def switch_skin(self, skin_id: str) -> bool:
@@ -93,7 +108,7 @@ class BuddyEngine:
         self.config.set("skin", skin_id)
 
         # Arrival celebration effect for new skin
-        self.particles.sky_strike(old_x, old_y)
+        self.particles.burst_sparks(old_x, old_y, count=30)
         self.audio.play("magic")
         print(f"[Buddy Engine] Switched to skin: {skin_id}")
         return True
@@ -105,11 +120,68 @@ class BuddyEngine:
         return self.paused
 
     def toggle_click_through(self) -> bool:
-        """Toggle between pure click-through and interactive hitboxes."""
+        """Toggle between interactive pet hitbox and 100% click-through."""
         self.click_through = not self.click_through
         self.config.set("click_through", self.click_through)
         self.window.set_click_through(self.click_through)
         return self.click_through
+
+    def set_scale(self, scale: float) -> None:
+        """Adjust character scale."""
+        self.character.scale = max(0.5, min(2.5, scale))
+        self.config.set("scale", self.character.scale)
+
+    def trigger_signature_ability(self) -> None:
+        """Triggers character-specific signature move on double click!"""
+        skin_id = self.character.skin_id
+        cx, cy = self.character.x, self.character.y
+        self.is_spinning = True
+        self.spin_end_time = time.time() + 1.2
+        self.shake.trigger(4.0)
+
+        if skin_id == "thor":
+            self.window.trigger_sky_strike(cx, cy)
+            self.particles.burst_sparks(cx, cy, count=35, color=CYAN_GLOW)
+            self.particles.shockwave(cx, cy, max_radius=80.0)
+            self.audio.play("lightning")
+            self.character.trigger_ability("hammer_spin", cx, cy, self.particles, self.audio)
+        elif skin_id == "dragon":
+            self.particles.shockwave(cx, cy, max_radius=75.0, color=(1.0, 0.4, 0.0))
+            self.particles.flame_breath(cx, cy, cx + (50 if self.character.facing_right else -50), cy)
+            self.audio.play("roar")
+        elif skin_id == "cat":
+            for _ in range(15):
+                self.particles.burst_sparks(cx, cy, count=3, color=(1.0, 0.4, 0.7))
+            self.audio.play("purr")
+        elif skin_id == "dog":
+            self.particles.burst_sparks(cx, cy, count=15, color=(1.0, 0.8, 0.2))
+            self.audio.play("bark")
+        elif skin_id == "hulk":
+            self.particles.shockwave(cx, cy, max_radius=85.0, color=(0.2, 0.9, 0.2))
+            self.audio.play("roar")
+        elif skin_id == "ironman":
+            self.particles.shockwave(cx, cy, max_radius=70.0, color=(0.2, 0.8, 1.0))
+            self.particles.burst_sparks(cx, cy, count=25, color=(0.2, 0.9, 1.0))
+            self.audio.play("laser")
+        elif skin_id == "harry_potter":
+            for _ in range(20):
+                self.particles.burst_sparks(cx, cy, count=3, color=(0.8, 0.8, 1.0))
+            self.audio.play("magic")
+        elif skin_id == "captain_america":
+            self.character.trigger_ability("shield_throw", cx, cy, self.particles, self.audio)
+            self.audio.play("laser")
+        elif skin_id == "thanos":
+            self.particles.shockwave(cx, cy, max_radius=90.0, color=(0.7, 0.1, 0.9))
+            self.audio.play("magic")
+        elif skin_id == "batman":
+            self.character.trigger_ability("smoke_bomb", cx, cy, self.particles, self.audio)
+            self.audio.play("swoosh")
+        elif skin_id == "superman":
+            self.character.trigger_ability("heat_vision", cx, cy, self.particles, self.audio)
+            self.audio.play("laser")
+        else:
+            self.particles.burst_sparks(cx, cy, count=15)
+            self.audio.play("magic")
 
     def on_tick(self) -> bool:
         """Master simulation tick."""
@@ -124,7 +196,7 @@ class BuddyEngine:
             self.fps_counter = 0
             self.fps_timer = now
 
-        # Query pointer position
+        # Query pointer position globally
         px, py = self.window.query_pointer()
         self.prev_cursor_x = self.cursor_x
         self.prev_cursor_y = self.cursor_y
@@ -132,27 +204,62 @@ class BuddyEngine:
         self.cursor_y = py
 
         if not self.paused:
-            # Update active character
-            self.character.update(
-                dt,
-                self.cursor_x,
-                self.cursor_y,
-                self.window.bounds,
-                self.particles,
-                self.audio,
-                self.config.data
-            )
+            if self.is_dragging:
+                # Dragging: follow mouse directly
+                self.character.x = max(0.0, min(self.window.screen_w, self.cursor_x - self.drag_offset_x))
+                self.character.y = max(0.0, min(self.window.screen_h, self.cursor_y - self.drag_offset_y))
+                self.character.vx = 0.0
+                self.character.vy = 0.0
+                self.character.facing_right = (self.cursor_x >= self.character.x)
 
-            # Update particles
+                # Trail particles while dragging
+                if self.character.skin_id == "thor":
+                    self.particles.burst_sparks(self.character.x, self.character.y + 15, count=2, color=CYAN_GLOW)
+                elif self.character.skin_id == "dragon":
+                    self.particles.flames.append(self.particles.create_flame(self.character.x, self.character.y + 10))
+                elif self.character.skin_id == "ironman":
+                    self.particles.burst_sparks(self.character.x, self.character.y + 16, count=2, color=(1.0, 0.5, 0.1))
+                elif self.character.skin_id == "superman":
+                    self.particles.burst_sparks(self.character.x, self.character.y + 16, count=1, color=(1.0, 0.2, 0.2))
+            else:
+                # Smart hysteresis deadzone like Mjolnir:
+                # Closer than 55px -> character does NOT run away; stays calm so user can click or drag it!
+                # Farther than 110px -> character wakes up and chases cursor across screen
+                dist_to_cursor = math.hypot(self.cursor_x - self.character.x, self.cursor_y - self.character.y)
+                if dist_to_cursor > 110.0:
+                    self.is_chasing = True
+                elif dist_to_cursor < 55.0:
+                    self.is_chasing = False
+
+                # Handle spin animation
+                if self.is_spinning:
+                    if now < self.spin_end_time:
+                        self.character.tilt += 0.35
+                    else:
+                        self.is_spinning = False
+                        self.character.tilt = 0.0
+
+                # Target coordinates passed to character:
+                # If within deadzone and idle, target is character's current position so it stays put!
+                target_x = self.cursor_x if self.is_chasing else self.character.x
+                target_y = self.cursor_y if self.is_chasing else self.character.y
+
+                self.character.update(
+                    dt,
+                    target_x,
+                    target_y,
+                    self.window.bounds,
+                    self.particles,
+                    self.audio,
+                    self.config.data
+                )
+
+            # Move the floating window so (half_size, half_size) matches (character.x, character.y)
+            self.window.move_to(self.character.x, self.character.y)
+
+            # Update particles & screen shake
             self.particles.update()
-
-            # Update screen shake
             self.shake.update()
-
-            # If interactive hitbox mode is active, update shape around character
-            if not self.click_through:
-                hx, hy, r = self.character.get_hitbox()
-                self.window.update_interactive_hitbox(hx, hy, radius=r + 15.0)
 
         # Redraw
         self.window.queue_draw()
@@ -166,85 +273,108 @@ class BuddyEngine:
         ctx.paint()
         ctx.restore()
 
-        # Apply screen shake offset if active
+        # 2. Translate coordinates so world (character.x, character.y) renders at window center
         ctx.save()
+        ctx.set_operator(cairo.OPERATOR_OVER)
+        ctx.translate(
+            self.window.half_size - self.character.x,
+            self.window.half_size - self.character.y
+        )
+
+        # Apply screen shake offset if active
         if self.shake.intensity > 0.1 and self.config.get("screen_shake_enabled", True):
             ctx.translate(self.shake.offset_x, self.shake.offset_y)
 
-        # 2. Render background particles & effects
-        ctx.set_operator(cairo.OPERATOR_OVER)
+        # Render particles & active character
         self.particles.draw(ctx)
-
-        # 3. Render active character
         self.character.draw(ctx, self.particles)
 
         ctx.restore()
 
-        # 4. Developer / Debug HUD
+        # 3. Compact developer HUD if debug mode
         if self.debug_mode:
             self._draw_debug_hud(ctx)
 
         return False
 
     def _draw_debug_hud(self, ctx: cairo.Context) -> None:
-        """Render developer telemetry overlay in corner."""
+        """Render compact developer telemetry badge."""
         ctx.save()
-        ctx.set_source_rgba(0.05, 0.05, 0.1, 0.75)
-        ctx.rectangle(20, 20, 260, 140)
+        ctx.set_source_rgba(0.05, 0.05, 0.1, 0.8)
+        ctx.rectangle(4, 4, 110, 34)
         ctx.fill()
 
-        ctx.set_source_rgba(0.0, 0.9, 1.0, 0.9)
-        ctx.set_line_width(1.5)
+        ctx.set_source_rgb(0.0, 0.9, 1.0)
+        ctx.set_line_width(1.0)
         ctx.stroke()
 
         ctx.set_source_rgb(1.0, 1.0, 1.0)
         ctx.select_font_face("Monospace", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        ctx.set_font_size(12)
-
-        lines = [
-            f"BUDDY DEVELOPER MODE",
-            f"Skin: {self.character.skin_id.upper()}",
-            f"State: {self.character.state}",
-            f"Pos: ({int(self.character.x)}, {int(self.character.y)})",
-            f"Vel: ({self.character.vx:.1f}, {self.character.vy:.1f})",
-            f"Target: ({int(self.cursor_x)}, {int(self.cursor_y)})",
-            f"FPS: {self.current_fps:.1f} / {self.target_fps}",
-            f"Particles: {len(self.particles.sparks) + len(self.particles.flames)}"
-        ]
-        for i, text in enumerate(lines):
-            ctx.move_to(30, 40 + (i * 14))
-            ctx.show_text(text)
-
+        ctx.set_font_size(9)
+        ctx.move_to(8, 16)
+        ctx.show_text(f"{self.character.skin_id.upper()} {self.current_fps:.0f}FPS")
+        ctx.move_to(8, 28)
+        ctx.show_text(f"{self.character.state}")
         ctx.restore()
 
     def on_button_press(self, widget: Gtk.Widget, event: Gdk.EventButton) -> bool:
-        """Handle mouse click in interactive mode."""
-        if event.button == 1:  # Left click: Pet or drag
-            hx, hy, r = self.character.get_hitbox()
-            if math.hypot(event.x_root - hx, event.y_root - hy) < r:
-                self.is_dragging = True
-                self.drag_offset_x = self.character.x - event.x_root
-                self.drag_offset_y = self.character.y - event.y_root
-                self.audio.play("purr" if self.character.skin_id == "cat" else "bark")
-                return True
-        elif event.button == 3:  # Right click: Context menu
+        """Handle mouse click on pet."""
+        click_dist = math.hypot(event.x - self.window.half_size, event.y - self.window.half_size)
+        if click_dist > 45.0:
+            return False
+
+        # 1. Double-click: signature ability move & spin
+        double_click_type = getattr(Gdk.EventType, "_2BUTTON_PRESS", 5)
+        if event.type == double_click_type:
+            self.trigger_signature_ability()
+            return True
+
+        # 2. Right-click: Open interactive options context menu
+        if event.button == 3:
             from ui.context_menu import show_context_menu
             show_context_menu(self, event)
             return True
+
+        # 3. Left-click: Start drag
+        if event.button == 1:
+            self.is_dragging = True
+            self.is_chasing = False
+            self.drag_offset_x = event.x - self.window.half_size
+            self.drag_offset_y = event.y - self.window.half_size
+            self.character.state = CharacterState.INTERACT
+
+            if self.character.skin_id == "cat":
+                self.audio.play("purr")
+            elif self.character.skin_id == "dog":
+                self.audio.play("bark")
+            else:
+                self.audio.play("magic")
+
+            self.particles.burst_sparks(self.character.x, self.character.y, count=8)
+            return True
+
         return False
 
     def on_button_release(self, widget: Gtk.Widget, event: Gdk.EventButton) -> bool:
         if event.button == 1:
             self.is_dragging = False
+            self.is_chasing = False
+            self.character.state = CharacterState.IDLE
+            return True
         return False
 
     def on_motion(self, widget: Gtk.Widget, event: Gdk.EventMotion) -> bool:
         if self.is_dragging:
-            self.character.x = event.x_root + self.drag_offset_x
-            self.character.y = event.y_root + self.drag_offset_y
-            self.character.vx = 0.0
-            self.character.vy = 0.0
-            return True
+            try:
+                px, py = self.window.query_pointer()
+                self.character.x = max(0.0, min(self.window.screen_w, px - self.drag_offset_x))
+                self.character.y = max(0.0, min(self.window.screen_h, py - self.drag_offset_y))
+                self.character.vx = 0.0
+                self.character.vy = 0.0
+                self.window.move_to(self.character.x, self.character.y)
+                return True
+            except Exception:
+                pass
         return False
 
     def run(self) -> None:
