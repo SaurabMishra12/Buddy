@@ -1,0 +1,15 @@
+{
+  "id": "dragon",
+  "name": "Dragon",
+  "title": "Flame Drake",
+  "description": "A mythical winged dragon that flaps its wings, breathes flame cones, spits explosive fireballs, and glides across monitors.",
+  "speed": 1.25,
+  "canFly": true,
+  "abilities": [
+    "fire_breath",
+    "fireball",
+    "flight",
+    "glide"
+  ],
+  "sound_theme": "fire"
+}

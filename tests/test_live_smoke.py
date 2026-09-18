@@ -1,0 +1,65 @@
+"""Live display smoke test: runs 120 animation ticks (2 seconds) on display."""
+
+import unittest
+import os
+import sys
+import time
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+# Ensure X11 backend
+os.environ["GDK_BACKEND"] = "x11"
+
+import gi
+gi.require_version("Gtk", "3.0")
+gi.require_version("GLib", "2.0")
+from gi.repository import Gtk, GLib
+
+from core.engine import BuddyEngine
+from skins.manager import skin_manager
+
+
+class TestLiveDisplaySmoke(unittest.TestCase):
+    def test_engine_run_and_skin_switch(self):
+        # Instantiate engine
+        engine = BuddyEngine(requested_skin="thor", debug_mode=True)
+        self.assertEqual(engine.character.skin_id, "thor")
+
+        ticks_counted = 0
+        max_ticks = 60
+
+        def test_step():
+            nonlocal ticks_counted
+            ticks_counted += 1
+
+            # At tick 30, test dynamic skin switch to dragon
+            if ticks_counted == 30:
+                success = engine.switch_skin("dragon")
+                self.assertTrue(success)
+                self.assertEqual(engine.character.skin_id, "dragon")
+
+            # At tick 50, test dynamic skin switch to cat
+            if ticks_counted == 50:
+                success = engine.switch_skin("cat")
+                self.assertTrue(success)
+                self.assertEqual(engine.character.skin_id, "cat")
+
+            if ticks_counted >= max_ticks:
+                Gtk.main_quit()
+                return False
+            return True
+
+        GLib.timeout_add(16, test_step)
+        engine.window.show()
+
+        # Run loop until Gtk.main_quit()
+        Gtk.main()
+
+        self.assertGreaterEqual(ticks_counted, max_ticks)
+
+
+if __name__ == "__main__":
+    unittest.main()

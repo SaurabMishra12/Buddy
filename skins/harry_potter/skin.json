@@ -1,0 +1,14 @@
+{
+  "id": "harry_potter",
+  "name": "Harry Potter",
+  "title": "The Boy Who Lived",
+  "description": "Young wizard in Gryffindor robes who casts magical spells from his wand, rides his flying broomstick, and teleports.",
+  "speed": 1.15,
+  "canFly": true,
+  "abilities": [
+    "cast_spell",
+    "broom_flight",
+    "teleport"
+  ],
+  "sound_theme": "magic"
+}

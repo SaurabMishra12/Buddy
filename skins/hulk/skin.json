@@ -1,0 +1,14 @@
+{
+  "id": "hulk",
+  "name": "Hulk",
+  "title": "The Incredible Avenger",
+  "description": "The green colossus with earth-shattering ground smashes, high jumps, roaring rage auras, and shockwaves.",
+  "speed": 0.95,
+  "canFly": false,
+  "abilities": [
+    "hulk_smash",
+    "super_jump",
+    "roar"
+  ],
+  "sound_theme": "smash"
+}

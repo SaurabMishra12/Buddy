@@ -1,0 +1,15 @@
+{
+  "id": "batman",
+  "name": "Batman",
+  "title": "The Dark Knight",
+  "description": "Gotham's protector equipped with a grappling hook winch, scalloped gliding cape, and batarang projectiles.",
+  "speed": 1.2,
+  "canFly": true,
+  "abilities": [
+    "grapple",
+    "cape_glide",
+    "batarang",
+    "perch"
+  ],
+  "sound_theme": "grapple"
+}

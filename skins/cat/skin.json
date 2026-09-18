@@ -1,0 +1,15 @@
+{
+  "id": "cat",
+  "name": "Cat",
+  "title": "Desktop Feline Companion",
+  "description": "A curious desktop cat that prowls, chases the cursor, wags its tail, grooms its paws, and curls up to nap.",
+  "speed": 1.0,
+  "canFly": false,
+  "abilities": [
+    "chase",
+    "pounce",
+    "groom",
+    "nap"
+  ],
+  "sound_theme": "purr"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "captain_america",
+  "name": "Captain America",
+  "title": "The First Avenger",
+  "description": "Steve Rogers in iconic star-spangled uniform, throwing and ricocheting his Vibranium Shield across the desktop.",
+  "speed": 1.15,
+  "canFly": false,
+  "abilities": [
+    "shield_throw",
+    "shield_block",
+    "hero_pose"
+  ],
+  "sound_theme": "shield"
+}

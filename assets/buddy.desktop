@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Buddy
+GenericName=Desktop Companion
+Comment=Polished, extensible Linux desktop pet application with superheroes and fantasy skins
+Exec=buddy
+Icon=buddy
+Terminal=false
+Categories=Utility;Amusement;Game;
+Keywords=pet;companion;desktop;thor;buddy;animation;
+StartupNotify=false

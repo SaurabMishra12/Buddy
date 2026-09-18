@@ -1,0 +1,15 @@
+{
+  "id": "dog",
+  "name": "Dog",
+  "title": "Loyal Canine Pal",
+  "description": "An energetic, cheerful puppy that wags its tail, barks playfully, digs, and joyfully greets your cursor.",
+  "speed": 1.1,
+  "canFly": false,
+  "abilities": [
+    "bark",
+    "dig",
+    "fetch",
+    "wag"
+  ],
+  "sound_theme": "bark"
+}

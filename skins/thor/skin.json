@@ -1,0 +1,15 @@
+{
+  "id": "thor",
+  "name": "Thor",
+  "title": "God of Thunder",
+  "description": "Asgardian thunder god wielding Mjolnir with cloth cape simulation and procedural fractal lightning.",
+  "speed": 1.2,
+  "canFly": true,
+  "abilities": [
+    "hammer_throw",
+    "lightning_summon",
+    "flight",
+    "hammer_spin"
+  ],
+  "sound_theme": "thunder"
+}

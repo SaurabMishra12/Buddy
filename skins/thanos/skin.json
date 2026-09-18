@@ -1,0 +1,16 @@
+{
+  "id": "thanos",
+  "name": "Thanos",
+  "title": "The Mad Titan",
+  "description": "Wielder of the Infinity Gauntlet. Harnesses the Time, Space, Power, Reality, Mind, and Soul stones for desktop-scale cosmic effects.",
+  "speed": 1.05,
+  "canFly": true,
+  "abilities": [
+    "time_stone",
+    "space_teleport",
+    "power_blast",
+    "reality_warp",
+    "the_snap"
+  ],
+  "sound_theme": "teleport"
+}

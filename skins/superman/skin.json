@@ -1,0 +1,14 @@
+{
+  "id": "superman",
+  "name": "Superman",
+  "title": "The Man of Steel",
+  "description": "Last Son of Krypton with supersonic flight, House of El crest, and twin crimson heat vision laser beams.",
+  "speed": 1.45,
+  "canFly": true,
+  "abilities": [
+    "heat_vision",
+    "supersonic_flight",
+    "super_jump"
+  ],
+  "sound_theme": "laser"
+}

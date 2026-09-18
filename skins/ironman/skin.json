@@ -1,0 +1,14 @@
+{
+  "id": "ironman",
+  "name": "Iron Man",
+  "title": "Armored Avenger",
+  "description": "Tony Stark in high-tech Mark armor with glowing arc reactor, rocket boot thrusters, and repulsor beams.",
+  "speed": 1.3,
+  "canFly": true,
+  "abilities": [
+    "repulsor_blast",
+    "flight",
+    "air_dash"
+  ],
+  "sound_theme": "jet"
+}
