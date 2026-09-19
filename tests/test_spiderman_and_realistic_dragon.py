@@ -201,7 +201,7 @@ class TestSpiderManAndRealisticDragon(unittest.TestCase):
         self.assertTrue(engine.character.is_hanging_upside_down)
 
     def test_web_rope_window_direct_bounds_and_render(self):
-        """Verify WebRopeWindow computes full bounding box, click-through, and renders unclipped."""
+        """Verify WebRopeWindow uses static screen overlay, click-through, and zero-resize updates."""
         pos1 = [200.0, 500.0]
         pos2 = [800.0, 50.0]
 
@@ -211,14 +211,29 @@ class TestSpiderManAndRealisticDragon(unittest.TestCase):
             rope_style="swing"
         )
         self.assertFalse(rope_win.is_destroyed)
+        self.assertFalse(rope_win.get_resizable())
         self.assertLessEqual(rope_win.cur_min_x, 200.0 - 40.0)
         self.assertLessEqual(rope_win.cur_min_y, 50.0 - 40.0)
         self.assertGreaterEqual(rope_win.cur_w, 600)
         self.assertGreaterEqual(rope_win.cur_h, 450)
 
-        # Move points and update
+        initial_w = rope_win.cur_w
+        initial_h = rope_win.cur_h
+        initial_x = rope_win.cur_min_x
+        initial_y = rope_win.cur_min_y
+
+        # Move points across several frames and update
         pos1[0] = 300.0
+        pos1[1] = 450.0
+        pos2[0] = 950.0
+        pos2[1] = 20.0
         rope_win.update()
+
+        # Geometry must remain strictly static (no resize/move) to prevent X11 black box flashing
+        self.assertEqual(rope_win.cur_w, initial_w)
+        self.assertEqual(rope_win.cur_h, initial_h)
+        self.assertEqual(rope_win.cur_min_x, initial_x)
+        self.assertEqual(rope_win.cur_min_y, initial_y)
 
         # Clean disposal
         rope_win.destroy_rope()

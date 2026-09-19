@@ -215,6 +215,7 @@ class WebRopeWindow(Gtk.Window):
         self.set_decorated(False)
         self.set_app_paintable(True)
         self.set_accept_focus(False)
+        self.set_focus_on_map(False)
         self.set_keep_above(True)
         self.set_skip_taskbar_hint(True)
         self.set_skip_pager_hint(True)
@@ -226,34 +227,77 @@ class WebRopeWindow(Gtk.Window):
         self.anim_time = 0.0
         self.is_destroyed = False
 
+        self.display = Gdk.Display.get_default()
         self.screen = Gdk.Screen.get_default()
+
+        # Compute virtual desktop span across all monitors to eliminate runtime window
+        # resizing and moving, which causes X11/Mutter to reallocate pixmaps with momentary black boxes!
+        origin_x, origin_y = 0, 0
+        win_w, win_h = 1920, 1080
+        if self.display:
+            n_monitors = self.display.get_n_monitors()
+            if n_monitors > 0:
+                min_mx, min_my = float("inf"), float("inf")
+                max_mx, max_my = float("-inf"), float("-inf")
+                for i in range(n_monitors):
+                    mon = self.display.get_monitor(i)
+                    if mon:
+                        g = mon.get_geometry()
+                        min_mx = min(min_mx, g.x)
+                        min_my = min(min_my, g.y)
+                        max_mx = max(max_mx, g.x + g.width)
+                        max_my = max(max_my, g.y + g.height)
+                if min_mx < float("inf"):
+                    origin_x = int(min_mx)
+                    origin_y = int(min_my)
+                    win_w = max(64, int(max_mx - min_mx))
+                    win_h = max(64, int(max_my - min_my))
+            else:
+                primary = self.display.get_primary_monitor() or self.display.get_monitor(0)
+                if primary:
+                    g = primary.get_geometry()
+                    origin_x, origin_y, win_w, win_h = g.x, g.y, g.width, g.height
+        elif self.screen:
+            win_w = max(64, self.screen.get_width())
+            win_h = max(64, self.screen.get_height())
+
+        self.origin_x = origin_x
+        self.origin_y = origin_y
+        self.win_w = win_w
+        self.win_h = win_h
+
+        # Retain attributes for backward compatibility with external references and tests
+        self.cur_min_x = origin_x
+        self.cur_min_y = origin_y
+        self.cur_w = win_w
+        self.cur_h = win_h
+
+        self.set_default_size(self.win_w, self.win_h)
+        self.set_resizable(False)
+
+        # Transparency setup: RGBA visual + CSS transparent background
         if self.screen is not None:
             visual = self.screen.get_rgba_visual()
             if visual is not None:
                 self.set_visual(visual)
 
-        # Initial bounding box
-        p1 = self.start_getter()
-        p2 = self.end_getter()
-        self.cur_min_x, self.cur_min_y, self.cur_w, self.cur_h = self._compute_bounds(p1, p2)
-        self.set_default_size(self.cur_w, self.cur_h)
-
-        self.realize()
-        gdk_win = self.get_window()
-        if gdk_win:
-            gdk_win.set_override_redirect(True)
-            # 100% click-through
-            gdk_win.input_shape_combine_region(cairo.Region(), 0, 0)
-
-        self.move(self.cur_min_x, self.cur_min_y)
-
-        # CSS transparency override
-        if self.screen:
             css_provider = Gtk.CssProvider()
             css_provider.load_from_data(b"window { background-color: transparent; }")
             Gtk.StyleContext.add_provider_for_screen(
                 self.screen, css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
             )
+            self.get_style_context().add_provider(
+                css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
+        self.realize()
+        gdk_win = self.get_window()
+        if gdk_win:
+            gdk_win.set_override_redirect(True)
+            # 100% input transparency (never intercepts mouse events)
+            gdk_win.input_shape_combine_region(cairo.Region(), 0, 0)
+
+        self.move(self.origin_x, self.origin_y)
 
         self.connect("draw", self.on_draw)
         self.show_all()
@@ -273,17 +317,6 @@ class WebRopeWindow(Gtk.Window):
             return
         self.anim_time += 0.05
         try:
-            p1 = self.start_getter()
-            p2 = self.end_getter()
-            min_x, min_y, w, h = self._compute_bounds(p1, p2)
-            if min_x != self.cur_min_x or min_y != self.cur_min_y:
-                self.move(min_x, min_y)
-                self.cur_min_x = min_x
-                self.cur_min_y = min_y
-            if abs(w - self.cur_w) > 4 or abs(h - self.cur_h) > 4:
-                self.resize(w, h)
-                self.cur_w = w
-                self.cur_h = h
             self.queue_draw()
         except Exception:
             pass
@@ -303,6 +336,8 @@ class WebRopeWindow(Gtk.Window):
         try:
             p1 = self.start_getter()
             p2 = self.end_getter()
+            if not p1 or not p2:
+                return False
         except Exception:
             return False
 
@@ -323,10 +358,10 @@ class WebRopeWindow(Gtk.Window):
             return False
 
         # Transform global coordinates to local window space
-        lx1 = p1[0] - self.cur_min_x
-        ly1 = p1[1] - self.cur_min_y
-        lx2 = p2[0] - self.cur_min_x
-        ly2 = p2[1] - self.cur_min_y
+        lx1 = p1[0] - self.origin_x
+        ly1 = p1[1] - self.origin_y
+        lx2 = p2[0] - self.origin_x
+        ly2 = p2[1] - self.origin_y
 
         dx = lx2 - lx1
         dy = ly2 - ly1
