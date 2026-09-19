@@ -382,15 +382,23 @@ class ParticleManager:
 
     def update(self) -> None:
         """Update simulation for all particles, removing dead ones."""
-        self.sparks = [s for s in self.sparks if s.update()]
-        self.flames = [f for f in self.flames if f.update()]
-        self.smoke = [sm for sm in self.smoke if sm.update()]
-        self.shockwaves = [sw for sw in self.shockwaves if sw.update()]
-        self.bolts = [b for b in self.bolts if b.update()]
+        if self.sparks:
+            self.sparks = [s for s in self.sparks if s.update()]
+        if self.flames:
+            self.flames = [f for f in self.flames if f.update()]
+        if self.smoke:
+            self.smoke = [sm for sm in self.smoke if sm.update()]
+        if self.shockwaves:
+            self.shockwaves = [sw for sw in self.shockwaves if sw.update()]
+        if self.bolts:
+            self.bolts = [b for b in self.bolts if b.update()]
 
     def draw(self, ctx: cairo.Context) -> None:
         """Render all active particles in layered order."""
         if not self.enabled:
+            return
+
+        if not (self.shockwaves or self.bolts or self.smoke or self.flames or self.sparks):
             return
 
         # 1. Background shockwaves

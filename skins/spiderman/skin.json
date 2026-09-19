@@ -1,0 +1,16 @@
+{
+  "id": "spiderman",
+  "name": "Spider-Man",
+  "title": "The Friendly Neighborhood Spider-Man",
+  "description": "Your friendly neighborhood web-slinger equipped with acrobatic pendulum web-swinging, THWIP! web throws, spider-sense danger detection, and wall-crawling.",
+  "speed": 1.35,
+  "canFly": true,
+  "abilities": [
+    "web_swing",
+    "web_throw",
+    "spider_sense",
+    "wall_crawl",
+    "perch"
+  ],
+  "sound_theme": "thwip"
+}

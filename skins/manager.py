@@ -22,6 +22,7 @@ BUILTIN_SKINS: Dict[str, Tuple[str, str]] = {
     "thanos": ("skins.thanos.character", "ThanosCharacter"),
     "batman": ("skins.batman.character", "BatmanCharacter"),
     "superman": ("skins.superman.character", "SupermanCharacter"),
+    "spiderman": ("skins.spiderman.character", "SpiderManCharacter"),
 }
 
 
@@ -52,7 +53,8 @@ class SkinManager:
             ("captain_america", "Captain America", "Super soldier throwing and bouncing his Vibranium Shield.", ["shield_throw", "shield_block", "hero_pose"]),
             ("thanos", "Thanos", "Titan wielding the 6 Infinity Stones with cosmic energy bursts.", ["time_stone", "reality_warp", "space_teleport", "power_blast", "the_snap"]),
             ("batman", "Batman", "Dark Knight grappling, cape gliding, and throwing batarangs.", ["grapple", "cape_glide", "batarang", "perch"]),
-            ("superman", "Superman", "Man of Steel flying at supersonic speed with laser heat vision.", ["heat_vision", "supersonic_flight", "super_jump"])
+            ("superman", "Superman", "Man of Steel flying at supersonic speed with laser heat vision.", ["heat_vision", "supersonic_flight", "super_jump"]),
+            ("spiderman", "Spider-Man", "Your friendly neighborhood Spider-Man with acrobatic web-swinging, web throws, and spider-sense.", ["web_swing", "web_throw", "spider_sense", "wall_crawl", "perch"])
         ]
 
         for skin_id, name, desc, abilities in skin_defs:
@@ -62,9 +64,9 @@ class SkinManager:
                 "name": name,
                 "description": desc,
                 "speed": 1.0,
-                "canFly": "flight" in abilities or "glide" in abilities,
+                "canFly": "flight" in abilities or "glide" in abilities or "web_swing" in abilities,
                 "abilities": abilities,
-                "category": "superhero" if skin_id in ["thor", "hulk", "ironman", "captain_america", "batman", "superman", "thanos"] else ("pet" if skin_id in ["cat", "dog"] else "fantasy")
+                "category": "superhero" if skin_id in ["thor", "hulk", "ironman", "captain_america", "batman", "superman", "thanos", "spiderman"] else ("pet" if skin_id in ["cat", "dog"] else "fantasy")
             }
             if meta_path.exists():
                 try:
@@ -96,6 +98,9 @@ class SkinManager:
         aliases = {
             "iron_man": "ironman",
             "super_man": "superman",
+            "spider_man": "spiderman",
+            "spidey": "spiderman",
+            "spider": "spiderman",
             "captainamerica": "captain_america",
             "harrypotter": "harry_potter",
             "harry": "harry_potter",
@@ -138,5 +143,5 @@ class SkinManager:
         return cls(x, y)
 
 
+# Global skin manager singleton with lazy on-demand module discovery
 skin_manager = SkinManager()
-skin_manager._discover_and_register_all()

@@ -1,8 +1,10 @@
 """Non-blocking audio engine supporting Linux native audio pipelines."""
 
 import os
+import queue
 import shutil
 import subprocess
+import threading
 import time
 import wave
 import struct
@@ -22,7 +24,27 @@ class SoundManager:
         self.last_played: Dict[str, float] = {}
         self.cooldown = 0.25  # Minimum seconds between repeating same sound effect
         self.player_cmd = self._detect_player()
+        self._audio_queue: queue.Queue = queue.Queue(maxsize=4)
+        self._init_worker_thread()
         self._ensure_synth_cache()
+
+    def _init_worker_thread(self) -> None:
+        """Starts background audio playback worker thread."""
+        def _audio_loop():
+            while True:
+                cmd = self._audio_queue.get()
+                if cmd is None:
+                    break
+                try:
+                    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    proc.wait(timeout=1.5)
+                except Exception:
+                    pass
+                finally:
+                    self._audio_queue.task_done()
+
+        t = threading.Thread(target=_audio_loop, daemon=True)
+        t.start()
 
     def _detect_player(self) -> Optional[str]:
         """Find the preferred low-latency audio player on Linux."""
@@ -44,6 +66,8 @@ class SoundManager:
             self._create_tone_if_missing("jet.wav", freq_start=280, freq_end=340, duration=0.3, noise=True)
             self._create_tone_if_missing("teleport.wav", freq_start=300, freq_end=750, duration=0.22, noise=False)
             self._create_tone_if_missing("grapple.wav", freq_start=600, freq_end=350, duration=0.2, noise=False)
+            self._create_tone_if_missing("thwip.wav", freq_start=1400, freq_end=320, duration=0.15, noise=True)
+            self._create_tone_if_missing("web.wav", freq_start=850, freq_end=220, duration=0.18, noise=False)
         except Exception as e:
             print(f"[Buddy Audio] Note: Could not create synthesized sound cache: {e}")
 
@@ -96,28 +120,6 @@ class SoundManager:
 
         if not sound_file or not os.path.exists(sound_file):
             return
-
-        # Bounded audio queue and worker thread prevents OS thread/process exhaustion
-        import queue
-        import threading
-
-        if not hasattr(self, "_audio_queue"):
-            self._audio_queue = queue.Queue(maxsize=4)
-            def _audio_loop():
-                while True:
-                    cmd = self._audio_queue.get()
-                    if cmd is None:
-                        break
-                    try:
-                        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        proc.wait(timeout=1.5)
-                    except Exception:
-                        pass
-                    finally:
-                        self._audio_queue.task_done()
-
-            t = threading.Thread(target=_audio_loop, daemon=True)
-            t.start()
 
         cmd = [self.player_cmd, sound_file] if self.player_cmd != "canberra-gtk-play" else [self.player_cmd, "-f", sound_file]
         try:

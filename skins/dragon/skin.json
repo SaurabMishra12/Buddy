@@ -1,15 +1,17 @@
 {
   "id": "dragon",
   "name": "Dragon",
-  "title": "Flame Drake",
-  "description": "A mythical winged dragon that flaps its wings, breathes flame cones, spits explosive fireballs, and glides across monitors.",
+  "title": "Obsidian Dreadwyrm",
+  "description": "A fearsome pitch-black dreadwyrm with articulated bat wings, serrated obsidian horns, razor talons, glowing molten eye, and incandescent fire breath.",
   "speed": 1.25,
   "canFly": true,
   "abilities": [
     "fire_breath",
     "fireball",
     "flight",
-    "glide"
+    "glide",
+    "roar",
+    "seat"
   ],
   "sound_theme": "fire"
 }

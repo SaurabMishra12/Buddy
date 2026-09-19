@@ -167,23 +167,42 @@ class CaptainAmericaCharacter(BaseCharacter):
         if not self.facing_right:
             ctx.scale(-1.0, 1.0)
 
-        # Running leg stride animation
+        # Dynamic running stride and forward soldier charge lean
         spd = abs(self.vx)
-        leg_stride = math.sin(self.anim_time * 12.0) * 8.0 if spd > 2.0 else 0.0
+        is_running = (self.state == CharacterState.RUN or spd > 2.0) and not self.is_hero_posing
 
-        # 1. Legs & Crimson Combat Boots
-        pat_pants = cairo.LinearGradient(0, 10, 0, 26)
-        pat_pants.add_color_stop_rgb(0.0, 0.14, 0.25, 0.52)
-        pat_pants.add_color_stop_rgb(1.0, 0.08, 0.15, 0.35)
+        run_cycle = self.anim_time * 12.0
+        if is_running:
+            bob = -abs(math.sin(run_cycle)) * 2.5
+            ctx.translate(0, bob)
+            ctx.rotate(0.22)  # ~13° super-soldier forward combat charge
 
+        # Color Palette
+        CAP_BLUE = (0.12, 0.26, 0.58)
+        CAP_BLUE_DARK = (0.07, 0.15, 0.36)
+        CAP_RED = (0.84, 0.12, 0.16)
+        CAP_RED_DARK = (0.60, 0.08, 0.10)
+        CAP_WHITE = (0.96, 0.96, 0.98)
+        LEATHER_BROWN = (0.34, 0.20, 0.12)
+        LEATHER_DARK = (0.22, 0.12, 0.07)
+        BUCKLE_GOLD = (0.86, 0.74, 0.22)
+        FLESH_TONE = (0.94, 0.78, 0.66)
+
+        # -------------------------------------------------------------
+        # 1. LEGS & CRIMSON COMBAT BOOTS (3/4 Soldier Stride)
+        # -------------------------------------------------------------
+        ctx.save()
         if self.is_hero_posing:
             # Heroic Wide Planted Stance
+            pat_pants = cairo.LinearGradient(0, 10, 0, 26)
+            pat_pants.add_color_stop_rgb(0.0, *CAP_BLUE)
+            pat_pants.add_color_stop_rgb(1.0, *CAP_BLUE_DARK)
             ctx.set_source(pat_pants)
             ctx.rectangle(-10, 12, 5.5, 14)
             ctx.rectangle(4.5, 12, 5.5, 14)
             ctx.fill()
             # Crimson Combat Boots with Tread
-            ctx.set_source_rgb(0.80, 0.12, 0.16)
+            ctx.set_source_rgb(*CAP_RED)
             ctx.rectangle(-11, 22, 6.5, 7)
             ctx.rectangle(3.5, 22, 6.5, 7)
             ctx.fill()
@@ -191,72 +210,168 @@ class CaptainAmericaCharacter(BaseCharacter):
             ctx.rectangle(-11, 27, 6.5, 2)
             ctx.rectangle(3.5, 27, 6.5, 2)
             ctx.fill()
-        else:
-            # Left Leg
-            ctx.set_source(pat_pants)
-            ctx.rectangle(-7 - leg_stride * 0.5, 12, 5.5, 14)
-            ctx.fill()
-            # Right Leg
-            ctx.rectangle(2 + leg_stride * 0.5, 12, 5.5, 14)
-            ctx.fill()
 
-            # Crimson Combat Boots with Tread
-            ctx.set_source_rgb(0.80, 0.12, 0.16)
-            ctx.rectangle(-8 - leg_stride * 0.5, 22, 6.5, 7)
-            ctx.rectangle(1 + leg_stride * 0.5, 22, 6.5, 7)
+        elif is_running:
+            sin_stride = math.sin(run_cycle)
+
+            # FAR LEG (Darker for depth, driving back in counter-cadence)
+            ctx.set_source_rgb(*CAP_BLUE_DARK)
+            ctx.set_line_width(6.2)
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            far_hip_x, far_hip_y = -4.0, 11.0
+            far_knee_x = far_hip_x - sin_stride * 9.0 - 1.5
+            far_knee_y = far_hip_y + 9.0 + max(0.0, sin_stride * 3.5)
+            far_foot_x = far_knee_x - sin_stride * 7.0 - 2.0
+            far_foot_y = far_knee_y + 10.0 - max(0.0, -sin_stride * 4.0)
+
+            ctx.move_to(far_hip_x, far_hip_y)
+            ctx.line_to(far_knee_x, far_knee_y)
+            ctx.line_to(far_foot_x, far_foot_y)
+            ctx.stroke()
+            # Far crimson combat boot
+            ctx.set_source_rgb(*CAP_RED_DARK)
+            ctx.set_line_width(5.8)
+            ctx.move_to(far_knee_x + (far_foot_x - far_knee_x) * 0.4, far_knee_y + (far_foot_y - far_knee_y) * 0.4)
+            ctx.line_to(far_foot_x, far_foot_y)
+            ctx.line_to(far_foot_x + (2.0 if sin_stride > 0 else -1.5), far_foot_y + 1.8)
+            ctx.stroke()
+
+            # NEAR LEG (High driving soldier knee with reinforced knee pad)
+            ctx.set_source_rgb(*CAP_BLUE)
+            ctx.set_line_width(6.8)
+            near_hip_x, near_hip_y = 4.0, 11.0
+            near_knee_x = near_hip_x + sin_stride * 11.0 + 2.0
+            near_knee_y = near_hip_y + 8.5 - max(0.0, sin_stride * 5.0)
+            near_foot_x = near_knee_x + sin_stride * 8.0 + (3.0 if sin_stride > 0 else -2.0)
+            near_foot_y = near_knee_y + 10.0 + max(0.0, -sin_stride * 3.5)
+
+            ctx.move_to(near_hip_x, near_hip_y)
+            ctx.line_to(near_knee_x, near_knee_y)
+            ctx.line_to(near_foot_x, near_foot_y)
+            ctx.stroke()
+            # Tactical Knee Pad
+            ctx.set_source_rgb(*CAP_BLUE_DARK)
+            ctx.arc(near_knee_x, near_knee_y, 3.4, 0, 2 * math.pi)
             ctx.fill()
+            # Near crimson combat boot
+            ctx.set_source_rgb(*CAP_RED)
+            ctx.set_line_width(6.4)
+            ctx.move_to(near_knee_x + (near_foot_x - near_knee_x) * 0.4, near_knee_y + (near_foot_y - near_knee_y) * 0.4)
+            ctx.line_to(near_foot_x, near_foot_y)
+            ctx.line_to(near_foot_x + 3.0, near_foot_y + 1.5)
+            ctx.stroke()
+            # Tread sole
             ctx.set_source_rgb(0.20, 0.05, 0.05)
-            ctx.rectangle(-8 - leg_stride * 0.5, 27, 6.5, 2)
-            ctx.rectangle(1 + leg_stride * 0.5, 27, 6.5, 2)
-            ctx.fill()
+            ctx.set_line_width(1.8)
+            ctx.move_to(near_foot_x - 2.0, near_foot_y + 2.0)
+            ctx.line_to(near_foot_x + 4.0, near_foot_y + 2.0)
+            ctx.stroke()
 
-        # 2. Torso with Red/White Abdominal Armor Stripes
-        pat_chest = cairo.LinearGradient(0, -12, 0, 12)
-        pat_chest.add_color_stop_rgb(0.0, 0.16, 0.32, 0.65)
+        else:
+            # Standing 3/4 Soldier Ready Stance
+            pat_pants = cairo.LinearGradient(0, 10, 0, 26)
+            pat_pants.add_color_stop_rgb(0.0, *CAP_BLUE)
+            pat_pants.add_color_stop_rgb(1.0, *CAP_BLUE_DARK)
+            # Far Leg
+            ctx.set_source_rgb(*CAP_BLUE_DARK)
+            ctx.set_line_width(6.2)
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            ctx.move_to(-5, 11)
+            ctx.line_to(-7, 20)
+            ctx.line_to(-8, 27)
+            ctx.stroke()
+            ctx.set_source_rgb(*CAP_RED_DARK)
+            ctx.set_line_width(5.8)
+            ctx.move_to(-7.5, 22)
+            ctx.line_to(-8.5, 27)
+            ctx.line_to(-10, 28)
+            ctx.stroke()
+
+            # Near Leg
+            ctx.set_source_rgb(*CAP_BLUE)
+            ctx.set_line_width(6.8)
+            ctx.move_to(3, 11)
+            ctx.line_to(5, 20)
+            ctx.line_to(6, 27)
+            ctx.stroke()
+            ctx.set_source_rgb(*CAP_RED)
+            ctx.set_line_width(6.4)
+            ctx.move_to(5.5, 22)
+            ctx.line_to(6.5, 27)
+            ctx.line_to(9, 28)
+            ctx.stroke()
+        ctx.restore()
+
+        # -------------------------------------------------------------
+        # 2. TACTICAL TORSO WITH 3/4 ABDOMINAL ARMOR STRIPES
+        # -------------------------------------------------------------
+        ctx.save()
+        # Navy blue tactical chest plate angled in 3/4
+        pat_chest = cairo.LinearGradient(2, -12, 2, 12)
+        pat_chest.add_color_stop_rgb(0.0, 0.16, 0.34, 0.68)
         pat_chest.add_color_stop_rgb(1.0, 0.08, 0.18, 0.42)
         ctx.set_source(pat_chest)
-        ctx.rectangle(-11, -11, 22, 23)
+        ctx.new_path()
+        ctx.move_to(-10, -12)
+        ctx.line_to(10, -12)
+        ctx.line_to(12, 2)
+        ctx.line_to(10, 11)
+        ctx.line_to(-9, 11)
+        ctx.line_to(-11, 2)
+        ctx.close_path()
         ctx.fill()
 
-        # Red & White Tactical Stripes on Abdomen
-        stripe_cols = [(0.85, 0.12, 0.15), (0.95, 0.95, 0.95), (0.85, 0.12, 0.15), (0.95, 0.95, 0.95), (0.85, 0.12, 0.15)]
+        # Red & White Tactical Stripes on Abdomen (Arced in 3/4 perspective)
+        stripe_cols = [CAP_RED, CAP_WHITE, CAP_RED, CAP_WHITE, CAP_RED]
         for i, col in enumerate(stripe_cols):
-            ctx.set_source_rgb(col[0], col[1], col[2])
-            ctx.rectangle(-8.5 + i * 3.4, 2, 3.4, 10)
+            ctx.set_source_rgb(*col)
+            sx = -8.0 + i * 3.6
+            ctx.rectangle(sx, 2, 3.2, 9)
             ctx.fill()
 
-        # Brown Leather Utility Belt & Tactical Buckles
-        ctx.set_source_rgb(0.32, 0.18, 0.10)
-        ctx.rectangle(-11, 11, 22, 3.5)
+        # Brown Leather Utility Belt & Tactical Pouches
+        ctx.set_source_rgb(*LEATHER_BROWN)
+        ctx.rectangle(-10, 10.5, 21, 3.5)
         ctx.fill()
-        ctx.set_source_rgb(0.85, 0.75, 0.20)
-        ctx.rectangle(-2.5, 10.5, 5, 4.5)
+        # Brass Belt Buckle centered in 3/4
+        ctx.set_source_rgb(*BUCKLE_GOLD)
+        ctx.rectangle(-1.5, 10, 4.5, 4.5)
+        ctx.fill()
+        # Side tactical equipment pouches
+        ctx.set_source_rgb(*LEATHER_DARK)
+        ctx.rectangle(-8.5, 10.5, 3.2, 3.5)
+        ctx.rectangle(6.5, 10.5, 3.2, 3.5)
         ctx.fill()
 
-        # White Star Insignia on Chest
+        # White Star Insignia on Upper Chest
         ctx.set_source_rgb(1.0, 1.0, 1.0)
         ctx.new_path()
+        star_cx, star_cy = 1.0, -5.0
         r_out = 5.0
         r_in = 2.2
         for i in range(5):
             ang = -math.pi / 2 + i * (2 * math.pi / 5)
-            x1 = math.cos(ang) * r_out
-            y1 = -4.5 + math.sin(ang) * r_out
+            x1 = star_cx + math.cos(ang) * r_out
+            y1 = star_cy + math.sin(ang) * r_out
             if i == 0:
                 ctx.move_to(x1, y1)
             else:
                 ctx.line_to(x1, y1)
             ang_in = ang + (math.pi / 5)
-            x2 = math.cos(ang_in) * r_in
-            y2 = -4.5 + math.sin(ang_in) * r_in
+            x2 = star_cx + math.cos(ang_in) * r_in
+            y2 = star_cy + math.sin(ang_in) * r_in
             ctx.line_to(x2, y2)
         ctx.close_path()
         ctx.fill()
+        ctx.restore()
 
-        # 3. Arms & Tactical Red Gauntlets
+        # -------------------------------------------------------------
+        # 3. ARMS & TACTICAL CRIMSON GAUNTLETS
+        # -------------------------------------------------------------
+        ctx.save()
         if self.is_hero_posing:
             # Right Arm in Crisp Military Salute to Helmet Brow
-            ctx.set_source(pat_chest)
+            ctx.set_source_rgb(*CAP_BLUE)
             ctx.set_line_width(4.5)
             ctx.set_line_cap(cairo.LINE_CAP_ROUND)
             ctx.new_path()
@@ -265,51 +380,138 @@ class CaptainAmericaCharacter(BaseCharacter):
             ctx.line_to(7, -19)
             ctx.stroke()
             # Red Combat Gauntlet on Salute Hand
-            ctx.set_source_rgb(0.80, 0.12, 0.16)
-            ctx.arc(7, -19, 3.0, 0, 2 * math.pi)
+            ctx.set_source_rgb(*CAP_RED)
+            ctx.arc(7, -19, 3.2, 0, 2 * math.pi)
             ctx.fill()
+
+        elif is_running:
+            # RUNNING SOLDIER ARM MOTION
+            arm_sin = math.sin(run_cycle)
+
+            # Trailing Arm (pumping backward in soldier cadence)
+            ctx.set_source_rgb(*CAP_BLUE_DARK)
+            ctx.set_line_width(5.2)
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            far_arm_x = -7.0 - arm_sin * 8.0
+            far_arm_y = -3.0 + abs(arm_sin) * 4.0
+            far_hand_x = far_arm_x - arm_sin * 6.0
+            far_hand_y = far_arm_y + 6.0 - arm_sin * 3.0
+            ctx.move_to(-7, -7)
+            ctx.line_to(far_arm_x, far_arm_y)
+            ctx.line_to(far_hand_x, far_hand_y)
+            ctx.stroke()
+            # Trailing red combat gauntlet
+            ctx.set_source_rgb(*CAP_RED_DARK)
+            ctx.arc(far_hand_x, far_hand_y, 3.2, 0, 2 * math.pi)
+            ctx.fill()
+
+            # Leading Arm (if shield is thrown, pumps forward with clenched fist)
+            if self.shield.state != "HELD":
+                ctx.set_source_rgb(*CAP_BLUE)
+                ctx.set_line_width(5.8)
+                near_arm_x = 8.0 + arm_sin * 8.0
+                near_arm_y = -3.0 + abs(arm_sin) * 3.0
+                near_hand_x = near_arm_x + arm_sin * 7.0 + 3.0
+                near_hand_y = near_arm_y - 3.0 - arm_sin * 4.0
+                ctx.move_to(7, -7)
+                ctx.line_to(near_arm_x, near_arm_y)
+                ctx.line_to(near_hand_x, near_hand_y)
+                ctx.stroke()
+                ctx.set_source_rgb(*CAP_RED)
+                ctx.arc(near_hand_x, near_hand_y, 3.5, 0, 2 * math.pi)
+                ctx.fill()
+
         else:
-            ctx.set_source(pat_chest)
-            ctx.rectangle(-15, -8, 4.5, 15)
-            ctx.rectangle(10, -8, 4.5, 15)
-            ctx.fill()
-            # Red Combat Gauntlets
-            ctx.set_source_rgb(0.80, 0.12, 0.16)
-            ctx.rectangle(-15, 3, 4.5, 7)
-            ctx.rectangle(10, 3, 4.5, 7)
+            # Standing / Idle arms
+            ctx.set_source_rgb(*CAP_BLUE_DARK)
+            ctx.set_line_width(5.0)
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            ctx.move_to(-8, -7)
+            ctx.line_to(-14, 2)
+            ctx.line_to(-12, 10)
+            ctx.stroke()
+            ctx.set_source_rgb(*CAP_RED_DARK)
+            ctx.arc(-12, 10, 3.0, 0, 2 * math.pi)
             ctx.fill()
 
-        # 4. Cowl Helmet with Embossed 'A' and Wings
-        ctx.set_source(pat_chest)
-        ctx.arc(0, -18, 9.5, 0, 2 * math.pi)
+            if self.shield.state != "HELD" and not self.is_blocking:
+                ctx.set_source_rgb(*CAP_BLUE)
+                ctx.set_line_width(5.5)
+                ctx.move_to(8, -7)
+                ctx.line_to(13, 2)
+                ctx.line_to(11, 10)
+                ctx.stroke()
+                ctx.set_source_rgb(*CAP_RED)
+                ctx.arc(11, 10, 3.2, 0, 2 * math.pi)
+                ctx.fill()
+        ctx.restore()
+
+        # -------------------------------------------------------------
+        # 4. 3/4 COWL HELMET WITH EMBOSSED 'A' AND WINGS
+        # -------------------------------------------------------------
+        ctx.save()
+        ctx.translate(2.0, -18)
+
+        # Helmet Head Sphere in 3/4 view
+        pat_helm = cairo.RadialGradient(2, -2, 2, 0, 0, 11)
+        pat_helm.add_color_stop_rgb(0.0, 0.18, 0.36, 0.70)
+        pat_helm.add_color_stop_rgb(1.0, 0.08, 0.18, 0.42)
+        ctx.set_source(pat_helm)
+        ctx.arc(0, 0, 9.5, 0, 2 * math.pi)
         ctx.fill()
 
-        # Jawline / Flesh Face
-        ctx.set_source_rgb(0.95, 0.78, 0.65)
-        ctx.rectangle(-5.5, -16, 11, 7.5)
+        # Jawline / Flesh Face in 3/4 profile
+        ctx.set_source_rgb(*FLESH_TONE)
+        ctx.new_path()
+        ctx.move_to(-3, 2)
+        ctx.line_to(6, 2)
+        ctx.line_to(7, 8)
+        ctx.line_to(1, 9)
+        ctx.line_to(-3, 8)
+        ctx.close_path()
         ctx.fill()
 
-        # Crisp White 'A' on Brow
-        ctx.set_source_rgb(1.0, 1.0, 1.0)
-        ctx.set_line_width(1.6)
-        ctx.move_to(-2.8, -15.5)
-        ctx.line_to(0, -22.5)
-        ctx.line_to(2.8, -15.5)
-        ctx.move_to(-1.8, -18.5)
-        ctx.line_to(1.8, -18.5)
+        # Brown Leather Chinstrap
+        ctx.set_source_rgb(*LEATHER_BROWN)
+        ctx.set_line_width(1.2)
+        ctx.move_to(-3, 3)
+        ctx.line_to(-1, 8.5)
+        ctx.line_to(3, 8.5)
+        ctx.line_to(5, 3)
         ctx.stroke()
 
-        # Silver Helmet Wing Accents
-        ctx.set_source_rgb(0.92, 0.94, 0.98)
-        for side in [-1, 1]:
-            ctx.new_path()
-            ctx.move_to(side * 6.5, -19)
-            ctx.line_to(side * 11.5, -23.5)
-            ctx.line_to(side * 7.5, -16.5)
-            ctx.close_path()
-            ctx.fill()
+        # Crisp White 'A' on Forehead Brow (angled in 3/4)
+        ctx.set_source_rgb(1.0, 1.0, 1.0)
+        ctx.set_line_width(1.6)
+        ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+        ctx.move_to(-0.5, 1.0)
+        ctx.line_to(2.0, -5.5)
+        ctx.line_to(4.5, 1.0)
+        ctx.move_to(0.5, -1.8)
+        ctx.line_to(3.5, -1.8)
+        ctx.stroke()
 
-        # 5. Held Vibranium Shield
+        # Silver Helmet Wings in 3/4 perspective
+        ctx.set_source_rgb(0.92, 0.94, 0.98)
+        # Near wing (prominent)
+        ctx.new_path()
+        ctx.move_to(5.5, -1.0)
+        ctx.line_to(10.5, -5.5)
+        ctx.line_to(6.5, 1.5)
+        ctx.close_path()
+        ctx.fill()
+        # Far wing (foreshortened)
+        ctx.new_path()
+        ctx.move_to(-6.0, -1.0)
+        ctx.line_to(-9.5, -5.0)
+        ctx.line_to(-6.5, 1.0)
+        ctx.close_path()
+        ctx.fill()
+        ctx.restore()
+
+        # -------------------------------------------------------------
+        # 5. HELD VIBRANIUM SHIELD (Dynamic 3/4 Running Combat Guard)
+        # -------------------------------------------------------------
         if self.shield.state == "HELD":
             ctx.save()
             if self.is_hero_posing:
@@ -317,11 +519,18 @@ class CaptainAmericaCharacter(BaseCharacter):
                 ctx.translate(0, 1)
                 ctx.scale(1.08, 1.08)
             elif self.is_blocking:
+                # Direct Forward Protective Barrier
                 ctx.translate(14, -2)
                 ctx.scale(0.85, 1.0)
+            elif is_running:
+                # DYNAMIC 3/4 RUNNING COMBAT GUARD ON FORWARD FOREARM!
+                ctx.translate(11, 0)
+                ctx.rotate(-0.15)
+                ctx.scale(0.82, 1.0)  # Realistic 3/4 elliptical foreshortening
             else:
-                ctx.translate(-11, 4)
-                ctx.scale(0.55, 1.0)
+                # Relaxed 3/4 Ready Shield Stance
+                ctx.translate(9, 3)
+                ctx.scale(0.72, 1.0)
 
             # Outer Crimson Vibranium Ring with Specular Rim
             ring_pat = cairo.RadialGradient(0, 0, 8, 0, 0, 17)
@@ -341,7 +550,7 @@ class CaptainAmericaCharacter(BaseCharacter):
             ctx.arc(0, 0, 9.0, 0, 2 * math.pi)
             ctx.fill()
 
-            # Deep Blue Center Field
+            # Deep Blue Center Starfield
             blue_pat = cairo.RadialGradient(0, 0, 1, 0, 0, 6)
             blue_pat.add_color_stop_rgb(0.0, 0.22, 0.45, 0.90)
             blue_pat.add_color_stop_rgb(1.0, 0.08, 0.20, 0.60)
@@ -375,13 +584,11 @@ class CaptainAmericaCharacter(BaseCharacter):
                 flare_alpha = 0.6 + 0.3 * math.sin(flare_time)
                 ctx.set_source_rgba(1.0, 0.95, 0.6, flare_alpha)
                 ctx.set_line_width(1.8)
-                # 4-point light gleam
                 ctx.move_to(-12, 0)
                 ctx.line_to(12, 0)
                 ctx.move_to(0, -12)
                 ctx.line_to(0, 12)
                 ctx.stroke()
-                # Diagonal secondary glints
                 ctx.set_line_width(1.0)
                 ctx.move_to(-6, -6)
                 ctx.line_to(6, 6)

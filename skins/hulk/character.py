@@ -209,6 +209,24 @@ class HulkCharacter(BaseCharacter):
         if not self.facing_right:
             ctx.scale(-1.0, 1.0)
 
+        # Dynamic 3/4 Colossal Titan Locomotion
+        spd = abs(self.vx)
+        is_moving = (self.state in (CharacterState.RUN, CharacterState.WALK) or spd > 1.2) and not (self.is_smashing or self.is_thunderclapping)
+        walk_cycle = self.anim_time * (10.5 if self.state == CharacterState.RUN else 7.0)
+
+        if is_moving:
+            bob = -abs(math.sin(walk_cycle)) * 3.2
+            sway = math.sin(walk_cycle) * 0.04
+            ctx.translate(0, bob)
+            ctx.rotate(0.24 + sway)  # Heavy hunched ~14° forward charge
+
+        # Hulk Color Palette
+        HULK_GREEN = (0.24, 0.68, 0.26)
+        HULK_GREEN_DARK = (0.12, 0.38, 0.14)
+        HULK_GREEN_DEEP = (0.07, 0.24, 0.09)
+        SHORTS_PURPLE = (0.46, 0.18, 0.60)
+        SHORTS_DARK = (0.26, 0.10, 0.36)
+
         # Radioactive Gamma Aura Glow
         if self.rage_aura > 0.05 or time.time() < self.rage_boost_timer:
             ctx.save()
@@ -222,68 +240,162 @@ class HulkCharacter(BaseCharacter):
             ctx.fill()
             ctx.restore()
 
-        # 3. Massive Muscular Legs & Torn Purple Trousers
-        # Legs
-        for lx in [-12, 4]:
-            ctx.save()
-            leg_pat = cairo.LinearGradient(lx, 12, lx + 9, 28)
-            leg_pat.add_color_stop_rgb(0.0, 0.22, 0.65, 0.24)
-            leg_pat.add_color_stop_rgb(1.0, 0.12, 0.42, 0.15)
-            ctx.set_source(leg_pat)
-            ctx.rectangle(lx, 12, 9, 16)
+        # -------------------------------------------------------------
+        # 3. TREE-TRUNK LEGS & SHREDDED PURPLE TROUSERS (3/4 Titan Locomotion)
+        # -------------------------------------------------------------
+        ctx.save()
+        if is_moving:
+            sin_walk = math.sin(walk_cycle)
+
+            # FAR TREE-TRUNK LEG (Driving in counter-cadence)
+            ctx.set_source_rgb(*HULK_GREEN_DARK)
+            ctx.set_line_width(9.5)
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            far_hip_x, far_hip_y = -6.0, 11.0
+            far_knee_x = far_hip_x - sin_walk * 11.0 - 2.0
+            far_knee_y = far_hip_y + 9.5 + max(0.0, sin_walk * 4.0)
+            far_foot_x = far_knee_x - sin_walk * 8.0 - 2.5
+            far_foot_y = far_knee_y + 11.0 - max(0.0, -sin_walk * 4.0)
+
+            ctx.move_to(far_hip_x, far_hip_y)
+            ctx.line_to(far_knee_x, far_knee_y)
+            ctx.line_to(far_foot_x, far_foot_y)
+            ctx.stroke()
+            # Far heavy foot & toes
+            ctx.arc(far_foot_x, far_foot_y, 5.0, 0, 2 * math.pi)
             ctx.fill()
 
-            # Heavy calf muscles
-            ctx.set_source_rgb(0.14, 0.46, 0.18)
-            ctx.set_line_width(1.2)
-            ctx.arc(lx + 4.5, 20, 4.0, 0, math.pi)
-            ctx.stroke()
-            ctx.restore()
+            # NEAR TREE-TRUNK LEG (Powerful forward knee drive)
+            ctx.set_source_rgb(*HULK_GREEN)
+            ctx.set_line_width(10.5)
+            near_hip_x, near_hip_y = 5.0, 11.0
+            near_knee_x = near_hip_x + sin_walk * 13.0 + 2.0
+            near_knee_y = near_hip_y + 9.0 - max(0.0, sin_walk * 5.5)
+            near_foot_x = near_knee_x + sin_walk * 9.0 + (3.5 if sin_walk > 0 else -2.5)
+            near_foot_y = near_knee_y + 11.0 + max(0.0, -sin_walk * 3.5)
 
-        # Torn Purple Shorts with ragged hem
-        shorts_pat = cairo.LinearGradient(-15, 6, 15, 18)
-        shorts_pat.add_color_stop_rgb(0.0, 0.48, 0.20, 0.62)
-        shorts_pat.add_color_stop_rgb(1.0, 0.30, 0.12, 0.40)
+            ctx.move_to(near_hip_x, near_hip_y)
+            ctx.line_to(near_knee_x, near_knee_y)
+            ctx.line_to(near_foot_x, near_foot_y)
+            ctx.stroke()
+            # Near heavy foot & splayed toes
+            ctx.arc(near_foot_x, near_foot_y, 5.5, 0, 2 * math.pi)
+            ctx.fill()
+            ctx.set_source_rgb(*HULK_GREEN_DARK)
+            ctx.set_line_width(1.5)
+            for tox in range(-3, 4, 3):
+                ctx.move_to(near_foot_x + tox, near_foot_y + 2)
+                ctx.line_to(near_foot_x + tox + 1, near_foot_y + 5)
+                ctx.stroke()
+
+        elif self.state == CharacterState.JUMP:
+            # Airborne flexed legs
+            ctx.set_source_rgb(*HULK_GREEN)
+            ctx.set_line_width(10.0)
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            ctx.move_to(-8, 11)
+            ctx.line_to(-14, 18)
+            ctx.line_to(-10, 25)
+            ctx.stroke()
+            ctx.move_to(8, 11)
+            ctx.line_to(14, 18)
+            ctx.line_to(10, 25)
+            ctx.stroke()
+
+        else:
+            # Standing 3/4 Titan Stance (Wide, immovable stance)
+            ctx.set_source_rgb(*HULK_GREEN_DARK)
+            ctx.set_line_width(9.5)
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            ctx.move_to(-7, 11)
+            ctx.line_to(-9, 20)
+            ctx.line_to(-11, 28)
+            ctx.stroke()
+            ctx.arc(-11, 28, 5.0, 0, 2 * math.pi)
+            ctx.fill()
+
+            ctx.set_source_rgb(*HULK_GREEN)
+            ctx.set_line_width(10.5)
+            ctx.move_to(5, 11)
+            ctx.line_to(7, 20)
+            ctx.line_to(9, 28)
+            ctx.stroke()
+            ctx.arc(9, 28, 5.5, 0, 2 * math.pi)
+            ctx.fill()
+        ctx.restore()
+
+        # Torn Purple Shorts with shredded hems in 3/4
+        ctx.save()
+        shorts_pat = cairo.LinearGradient(0, 6, 0, 18)
+        shorts_pat.add_color_stop_rgb(0.0, *SHORTS_PURPLE)
+        shorts_pat.add_color_stop_rgb(1.0, *SHORTS_DARK)
         ctx.set_source(shorts_pat)
-        ctx.rectangle(-15, 6, 30, 13)
+        ctx.new_path()
+        ctx.move_to(-15, 6)
+        ctx.line_to(15, 6)
+        ctx.line_to(14, 16)
+        ctx.line_to(-14, 16)
+        ctx.close_path()
         ctx.fill()
 
-        # Ragged torn cloth fringes
-        ctx.set_source_rgb(0.25, 0.08, 0.35)
+        # Ragged torn fringes fluttering
+        ctx.set_source_rgb(0.20, 0.06, 0.28)
+        ctx.set_line_width(1.6)
         ctx.new_path()
         for x_step in range(-15, 16, 3):
-            ctx.line_to(x_step, 19 + (abs(x_step) % 4))
+            ctx.move_to(x_step, 16)
+            ctx.line_to(x_step + 1.2, 19 + (abs(x_step) % 4))
+            ctx.line_to(x_step + 3.0, 16)
         ctx.stroke()
+        ctx.restore()
 
-        # 4. Colossal Muscular Torso & Sculpted Pectorals
+        # -------------------------------------------------------------
+        # 4. COLOSSAL 3/4 HUNCHED TITAN TORSO & MASSIVE TRAPS
+        # -------------------------------------------------------------
+        ctx.save()
+        # Massive Trapezius Hump rising behind neck
+        ctx.set_source_rgb(*HULK_GREEN_DARK)
+        ctx.new_path()
+        ctx.move_to(-16, -14)
+        ctx.curve_to(-14, -25, 2, -24, 7, -15)
+        ctx.close_path()
+        ctx.fill()
+
+        # Colossal Muscular Torso angled in 3/4 view
         torso_pat = cairo.LinearGradient(-18, -14, 18, 12)
         torso_pat.add_color_stop_rgb(0.0, 0.26, 0.72, 0.28)
         torso_pat.add_color_stop_rgb(0.5, 0.18, 0.58, 0.22)
         torso_pat.add_color_stop_rgb(1.0, 0.10, 0.38, 0.14)
         ctx.set_source(torso_pat)
         ctx.new_path()
-        ctx.move_to(-18, -12)
-        ctx.line_to(18, -12)
-        ctx.line_to(14, 10)
-        ctx.line_to(-14, 10)
+        ctx.move_to(-17, -12)
+        ctx.line_to(16, -12)
+        ctx.line_to(13, 9)
+        ctx.line_to(-13, 9)
         ctx.close_path()
         ctx.fill()
 
-        # Sculpted Pectoral Plates
-        ctx.set_source_rgba(0.08, 0.28, 0.10, 0.55)
+        # Sculpted 3/4 Pectoral Slabs
+        ctx.set_source_rgba(*HULK_GREEN_DEEP, 0.60)
         ctx.set_line_width(2.0)
-        ctx.arc(-8, -4, 7, 0, math.pi)
+        # Near prominent pec
+        ctx.arc(4, -4, 7.5, 0, math.pi)
         ctx.stroke()
-        ctx.arc(8, -4, 7, 0, math.pi)
+        # Far foreshortened pec
+        ctx.arc(-8, -4, 6.0, 0, math.pi)
         ctx.stroke()
         # Abdominal division lines
         ctx.move_to(0, -4)
         ctx.line_to(0, 8)
-        ctx.move_to(-6, 2)
-        ctx.line_to(6, 2)
+        ctx.move_to(-5, 2)
+        ctx.line_to(5, 2)
         ctx.stroke()
+        ctx.restore()
 
-        # 5. Massive Arms, Shoulders & Action Poses
+        # -------------------------------------------------------------
+        # 5. MASSIVE SWINGING BOULDER ARMS & FISTS
+        # -------------------------------------------------------------
+        ctx.save()
         if self.is_smashing:
             # Slam Pose: Both giant fists raised high overhead ready to slam!
             for ax in [-18, 8]:
@@ -308,7 +420,6 @@ class HulkCharacter(BaseCharacter):
             ctx.set_source(arm_pat)
             ctx.rectangle(10, -9, 16, 8)
             ctx.fill()
-            # Interlocked giant hands
             ctx.arc(26, -5, 8.5, 0, 2 * math.pi)
             ctx.fill()
             ctx.restore()
@@ -326,69 +437,150 @@ class HulkCharacter(BaseCharacter):
                 ctx.arc(ax + 5, 6, 7.5, 0, 2 * math.pi)
                 ctx.fill()
                 ctx.restore()
-        else:
-            # Standing / Running: Giant arms hanging with clenched fists
-            for ax in [-24, 14]:
-                ctx.save()
-                arm_pat = cairo.LinearGradient(ax, -10, ax + 10, 16)
-                arm_pat.add_color_stop_rgb(0.0, 0.26, 0.72, 0.28)
-                arm_pat.add_color_stop_rgb(1.0, 0.12, 0.42, 0.15)
-                ctx.set_source(arm_pat)
-                ctx.rectangle(ax, -10, 10, 24)
-                ctx.fill()
-                # Giant Fists
-                ctx.arc(ax + 5, 15, 7.5, 0, 2 * math.pi)
-                ctx.fill()
-                ctx.restore()
 
-        # 6. Head, Furrowed Brow & Radioactive Glowing Eyes
+        elif is_moving:
+            # HEAVY SWINGING BOULDER FISTS
+            arm_sin = math.sin(walk_cycle)
+
+            # TRAILING ARM (Swinging heavy backward arc)
+            ctx.set_source_rgb(*HULK_GREEN_DARK)
+            ctx.set_line_width(9.0)
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            far_elbow_x = -10.0 - arm_sin * 10.0
+            far_elbow_y = -3.0 + abs(arm_sin) * 4.0
+            far_fist_x = far_elbow_x - arm_sin * 8.0
+            far_fist_y = far_elbow_y + 10.0 - arm_sin * 4.0
+            ctx.move_to(-10, -8)
+            ctx.line_to(far_elbow_x, far_elbow_y)
+            ctx.line_to(far_fist_x, far_fist_y)
+            ctx.stroke()
+            # Trailing boulder fist
+            ctx.arc(far_fist_x, far_fist_y, 7.5, 0, 2 * math.pi)
+            ctx.fill()
+
+            # LEADING ARM (Swinging heavy forward destructive arc)
+            ctx.set_source_rgb(*HULK_GREEN)
+            ctx.set_line_width(10.5)
+            near_elbow_x = 10.0 + arm_sin * 10.0
+            near_elbow_y = -3.0 + abs(arm_sin) * 4.0
+            near_fist_x = near_elbow_x + arm_sin * 9.0 + 4.0
+            near_fist_y = near_elbow_y + 8.0 - arm_sin * 5.0
+            ctx.move_to(9, -8)
+            ctx.line_to(near_elbow_x, near_elbow_y)
+            ctx.line_to(near_fist_x, near_fist_y)
+            ctx.stroke()
+            # Leading massive boulder fist
+            ctx.arc(near_fist_x, near_fist_y, 8.5, 0, 2 * math.pi)
+            ctx.fill()
+            # Knuckle muscle definition
+            ctx.set_source_rgb(*HULK_GREEN_DEEP)
+            ctx.set_line_width(1.6)
+            ctx.arc(near_fist_x, near_fist_y, 5.0, -0.8, 1.2)
+            ctx.stroke()
+
+        else:
+            # Standing / Idle relaxed massive arms
+            breath = math.sin(self.anim_time * 3.0) * 1.5
+            ctx.set_source_rgb(*HULK_GREEN_DARK)
+            ctx.set_line_width(9.0)
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            ctx.move_to(-12, -8)
+            ctx.line_to(-18, 4)
+            ctx.line_to(-15, 16 + breath)
+            ctx.stroke()
+            ctx.arc(-15, 16 + breath, 7.2, 0, 2 * math.pi)
+            ctx.fill()
+
+            ctx.set_source_rgb(*HULK_GREEN)
+            ctx.set_line_width(10.0)
+            ctx.move_to(11, -8)
+            ctx.line_to(17, 4)
+            ctx.line_to(14, 16 + breath)
+            ctx.stroke()
+            ctx.arc(14, 16 + breath, 8.0, 0, 2 * math.pi)
+            ctx.fill()
+        ctx.restore()
+
+        # -------------------------------------------------------------
+        # 6. SNARLING 3/4 TITAN HEAD, UNDERBITE FANGS & RADIOACTIVE EYES
+        # -------------------------------------------------------------
         ctx.save()
-        head_pat = cairo.RadialGradient(0, -18, 2, 0, -18, 12)
+        ctx.translate(3.5, -18)  # Head thrust forward from trapezius
+
+        # Head Base in 3/4 perspective
+        head_pat = cairo.RadialGradient(2, -1, 2, 0, 0, 13)
         head_pat.add_color_stop_rgb(0.0, 0.28, 0.74, 0.30)
         head_pat.add_color_stop_rgb(1.0, 0.14, 0.46, 0.18)
         ctx.set_source(head_pat)
-        ctx.arc(0, -18, 12.5, 0, 2 * math.pi)
+        ctx.arc(0, 0, 12.0, 0, 2 * math.pi)
         ctx.fill()
 
-        # Shaggy Jet-Black / Dark Green Hair
+        # Shaggy Jet-Black / Dark Green Hair swept back
         ctx.set_source_rgb(0.06, 0.10, 0.08)
-        ctx.arc(0, -22, 12.5, math.pi, 2 * math.pi)
+        ctx.arc(-1, -4, 12.0, math.pi * 0.9, math.pi * 2.05)
         ctx.fill()
         # Spiky hair tufts
-        for hx in [-9, -4, 0, 4, 8]:
+        for hx in [-9, -4, 1, 6]:
             ctx.new_path()
-            ctx.move_to(hx - 2, -22)
-            ctx.line_to(hx, -26)
-            ctx.line_to(hx + 2, -22)
+            ctx.move_to(hx - 2, -4)
+            ctx.line_to(hx, -9)
+            ctx.line_to(hx + 2, -4)
             ctx.close_path()
             ctx.fill()
 
-        # Enraged Glowing Eyes
-        ctx.set_source_rgb(0.3, 1.0, 0.2)  # Glowing radioactive lime
-        ctx.arc(-4, -18, 2.4, 0, 2 * math.pi)
-        ctx.arc(4, -18, 2.4, 0, 2 * math.pi)
-        ctx.fill()
-        ctx.set_source_rgb(1.0, 1.0, 0.7)
-        ctx.arc(-4, -18, 1.0, 0, 2 * math.pi)
-        ctx.arc(4, -18, 1.0, 0, 2 * math.pi)
-        ctx.fill()
-
-        # Heavy Furrowed Brow
-        ctx.set_source_rgb(0.08, 0.28, 0.10)
-        ctx.set_line_width(2.2)
-        ctx.move_to(-9, -21)
-        ctx.line_to(-1, -19)
-        ctx.line_to(1, -19)
-        ctx.line_to(9, -21)
+        # Heavy Furrowed Brow Ridge jutting forward
+        ctx.set_source_rgb(*HULK_GREEN_DEEP)
+        ctx.set_line_width(2.5)
+        ctx.move_to(-7, -3)
+        ctx.line_to(1, -1)
+        ctx.line_to(7, -3)
         ctx.stroke()
 
-        # Enraged Jaws / Teeth
-        ctx.set_source_rgb(0.08, 0.28, 0.10)
-        ctx.rectangle(-5, -13, 10, 3)
+        # Enraged Radioactive Lime Eyes (3/4 angle)
+        # Near eye (prominent)
+        ctx.set_source_rgb(0.3, 1.0, 0.2)
+        ctx.arc(4, 0, 2.4, 0, 2 * math.pi)
         ctx.fill()
+        ctx.set_source_rgb(1.0, 1.0, 0.7)
+        ctx.arc(4, 0, 1.0, 0, 2 * math.pi)
+        ctx.fill()
+        # Far eye (foreshortened)
+        ctx.set_source_rgb(0.3, 1.0, 0.2)
+        ctx.arc(-3, 0, 1.8, 0, 2 * math.pi)
+        ctx.fill()
+        ctx.set_source_rgb(1.0, 1.0, 0.7)
+        ctx.arc(-3, 0, 0.8, 0, 2 * math.pi)
+        ctx.fill()
+
+        # Snarling Jutting Lower Jaw & Teeth in 3/4 profile
+        ctx.set_source_rgb(*HULK_GREEN_DEEP)
+        ctx.new_path()
+        ctx.move_to(-4, 5)
+        ctx.line_to(6, 5)
+        ctx.line_to(7, 9)
+        ctx.line_to(1, 10.5)
+        ctx.line_to(-4, 9)
+        ctx.close_path()
+        ctx.fill()
+
+        # White Underbite Fangs
         ctx.set_source_rgb(0.95, 0.95, 0.90)
-        for tx in [-3, -1, 1, 3]:
-            ctx.rectangle(tx - 0.5, -13, 1.2, 2.0)
+        # Big canine fangs pointing UP from lower jaw
+        ctx.new_path()
+        ctx.move_to(4.5, 8.5)
+        ctx.line_to(5.5, 4.5)
+        ctx.line_to(6.5, 8.5)
+        ctx.close_path()
+        ctx.fill()
+        ctx.new_path()
+        ctx.move_to(-1.5, 8.5)
+        ctx.line_to(-0.5, 5.0)
+        ctx.line_to(0.5, 8.5)
+        ctx.close_path()
+        ctx.fill()
+        # Smaller incisors
+        for tx in [1.5, 3.0]:
+            ctx.rectangle(tx, 6.0, 1.0, 2.0)
             ctx.fill()
 
         ctx.restore()

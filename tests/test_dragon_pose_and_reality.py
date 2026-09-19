@@ -48,6 +48,53 @@ class TestDragonPoseAndReality(unittest.TestCase):
         self.assertGreater(dragon.wing_speed, 0.0)
         self.assertIsNotNone(dragon.wing_angle)
 
+    def test_dragon_articulated_kinematics_and_states(self):
+        """Verify Dragon dynamic kinematics across flight, walk, perched, and jaw articulation."""
+        dragon = DragonCharacter(300.0, 300.0)
+
+        # 1. Flight wing flapping and tail kinematics
+        wing_angles = []
+        for _ in range(15):
+            dragon.update(0.016, 600.0, 300.0, self.bounds, self.particles, audio_manager, self.config)
+            wing_angles.append(dragon.wing_angle)
+        # Wing angle must actively change and oscillate
+        self.assertNotEqual(wing_angles[0], wing_angles[7])
+        self.assertNotEqual(dragon.tail_wave, 0.0)
+        self.assertNotEqual(dragon.back_wing_angle, 0.0)
+        dragon.draw(self.ctx, self.particles)
+
+        # 2. Fire breath jaw unhinging
+        self.assertTrue(dragon.trigger_ability("fire_breath", 600.0, 300.0, self.particles, audio_manager))
+        self.assertTrue(dragon.is_breathing_fire)
+        dragon.update(0.016, 600.0, 300.0, self.bounds, self.particles, audio_manager, self.config)
+        self.assertGreater(dragon.jaw_open, 0.5)
+        # Draw while breathing fire with open jaw and glowing maw
+        dragon.draw(self.ctx, self.particles)
+
+        # 3. Ground walking & claw stride kinematics
+        ground_y = self.bounds[1] + self.bounds[3] - 75.0
+        dragon.y = ground_y
+        initial_paw_step = dragon.paw_step
+        for _ in range(10):
+            dragon.update(0.016, 600.0, ground_y, self.bounds, self.particles, audio_manager, self.config)
+        self.assertEqual(dragon.state, CharacterState.WALK)
+        self.assertGreater(dragon.paw_step, initial_paw_step)
+        dragon.draw(self.ctx, self.particles)
+
+        # 4. Seated posture on ground
+        self.assertTrue(dragon.trigger_ability("seat", 300.0, ground_y, self.particles, audio_manager))
+        self.assertTrue(dragon.is_seated)
+        self.assertEqual(dragon.state, CharacterState.IDLE)
+        dragon.update(0.016, dragon.x, ground_y, self.bounds, self.particles, audio_manager, self.config)
+        self.assertGreater(dragon.wing_angle, 0.15)  # Folded wings
+        dragon.draw(self.ctx, self.particles)
+
+        # 5. Eye blink state
+        dragon.blink_state = 1.0  # Eyelid closed
+        dragon.draw(self.ctx, self.particles)
+        dragon.blink_state = 0.0  # Eyelid open
+        dragon.draw(self.ctx, self.particles)
+
     def test_captain_america_hero_pose_persistence(self):
         """Verify Cap hero pose does NOT get immediately overwritten by movement updates."""
         cap = CaptainAmericaCharacter(200.0, 950.0)

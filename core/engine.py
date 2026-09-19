@@ -152,6 +152,11 @@ class BuddyEngine:
         elif norm_id == "batman":
             self.particles.shockwave(old_x, old_y, max_radius=60.0, color=(0.3, 0.3, 0.35))
             self.audio.play("swoosh")
+        elif norm_id == "spiderman":
+            self.particles.shockwave(old_x, old_y, max_radius=70.0, color=(0.92, 0.96, 1.0))
+            self.particles.burst_sparks(old_x, old_y, count=22, color=(0.86, 0.12, 0.12))
+            self.particles.burst_sparks(old_x, old_y, count=14, color=(0.08, 0.18, 0.44))
+            self.audio.play("thwip")
         # Ensure non-flying ground characters are placed safely on the ground
         if not meta.get("canFly", False):
             min_x, min_y, screen_w, screen_h = self.window.bounds
@@ -198,6 +203,7 @@ class BuddyEngine:
         """Pause or resume Buddy."""
         self.paused = not self.paused
         print(f"[Buddy Engine] Pet {'paused' if self.paused else 'resumed'}")
+        self.window.queue_draw()
         return self.paused
 
     def toggle_click_through(self) -> bool:
@@ -263,12 +269,19 @@ class BuddyEngine:
         elif skin_id == "batman":
             self.character.trigger_ability("smoke_bomb", cx, cy, self.particles, self.audio)
             self.audio.play("swoosh")
+        elif skin_id == "spiderman":
+            self.character.trigger_ability("upside_down_hang", cx, cy, self.particles, self.audio)
+            self.particles.shockwave(cx, cy, max_radius=85.0, color=(0.94, 0.97, 1.0))
+            self.audio.play("thwip")
         else:
             self.particles.burst_sparks(cx, cy, count=15)
             self.audio.play("magic")
 
     def on_tick(self) -> bool:
         """Master simulation tick."""
+        if self.paused:
+            return True
+
         now = time.time()
         dt = max(1e-4, now - self.last_frame_time)
         self.last_frame_time = now
@@ -308,6 +321,10 @@ class BuddyEngine:
                     if dist > 12.0:
                         self.character.facing_right = (dx >= 0.0)
                         self.character.state = CharacterState.FLY
+                        if hasattr(self.character, "is_seated"):
+                            self.character.is_seated = False
+                        if hasattr(self.character, "is_sleeping"):
+                            self.character.is_sleeping = False
                         follow_spd = min(15.0, max(2.5, dist * 0.085))
                         target_vx = (dx / dist) * follow_spd
                         target_vy = (dy / dist) * follow_spd
@@ -351,6 +368,24 @@ class BuddyEngine:
                         self.character.vx *= 0.82
                         self.character.vy *= 0.82
                         self.character.tilt *= 0.82
+                        self.character.x += self.character.vx
+                        self.character.y += self.character.vy
+
+                elif skin == "spiderman":
+                    # SPIDER-MAN: Acrobatic Pendulum Web-Swinging Locomotion
+                    if dist > 24.0:
+                        self.character.facing_right = (dx >= 0.0)
+                        self.character.state = CharacterState.FLY
+                        if not getattr(self.character, "is_swinging", False):
+                            self.character.trigger_ability("web_swing", target_x, target_y, self.particles, self.audio)
+                        else:
+                            self.character.anchor_x += (target_x - self.character.anchor_x) * 0.15
+                            self.character.anchor_y = max(30.0, min(self.character.y - 140.0, target_y - 180.0))
+                    else:
+                        self.character.is_swinging = False
+                        self.character.state = CharacterState.HOVER
+                        self.character.vx *= 0.80
+                        self.character.vy *= 0.80
                         self.character.x += self.character.vx
                         self.character.y += self.character.vy
 
@@ -463,8 +498,8 @@ class BuddyEngine:
             self.particles.update()
             self.shake.update()
 
-        # Redraw
-        self.window.queue_draw()
+            # Redraw
+            self.window.queue_draw()
         return True
 
     def on_draw(self, widget: Gtk.Widget, ctx: cairo.Context) -> bool:

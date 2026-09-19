@@ -82,9 +82,14 @@ class DesktopProjectileWindow(Gtk.Window):
         self.sparks: List[Dict[str, Any]] = []
         self.shockwave_rad = 0.0
         self.shockwave_alpha = 0.0
+        self._last_wx = None
+        self._last_wy = None
+        initial_wx = int(self.x - self.half_size)
+        initial_wy = int(self.y - self.half_size)
+        self.move(initial_wx, initial_wy)
+        self._last_wx = initial_wx
+        self._last_wy = initial_wy
         self.explosion_frame = 0
-
-        self.move(int(self.x - self.half_size), int(self.y - self.half_size))
 
         self.connect("draw", self.on_draw)
         GLib.timeout_add(16, self.on_tick)
@@ -122,11 +127,17 @@ class DesktopProjectileWindow(Gtk.Window):
             if hit_edge or hit_target:
                 # Screen edge or target collision!
                 self._trigger_collision()
+                if self.proj_type in ("fireball", "web"):
+                    self.state = "EXPLODING"
+                    self.explosion_frame = 0
+                else:
+                    self.state = "RETURNING"
 
         elif self.state == "RETURNING":
-            ox, oy = self.owner_getter()
-            dx = ox - self.x
-            dy = oy - self.y
+            # Boomerang spring-damper return to hero's actual position
+            hx, hy = self.owner_getter()
+            dx = hx - self.x
+            dy = hy - self.y
             dist = math.hypot(dx, dy) + 1e-4
 
             pull = min(32.0, max(16.0, dist * 0.12))
@@ -161,7 +172,12 @@ class DesktopProjectileWindow(Gtk.Window):
                 return False
 
         # Move the transparent window to current position
-        self.move(int(self.x - self.half_size), int(self.y - self.half_size))
+        wx = int(self.x - self.half_size)
+        wy = int(self.y - self.half_size)
+        if wx != self._last_wx or wy != self._last_wy:
+            self.move(wx, wy)
+            self._last_wx = wx
+            self._last_wy = wy
         self.queue_draw()
         return True
 
@@ -202,6 +218,9 @@ class DesktopProjectileWindow(Gtk.Window):
         elif self.proj_type == "power_blast":
             audio_manager.play("smash")
             self.state = "EXPLODING"
+        elif self.proj_type == "web":
+            audio_manager.play("thwip")
+            self.state = "EXPLODING"
         else:
             # Repulsor blast detonates on impact
             audio_manager.play("laser")
@@ -229,6 +248,8 @@ class DesktopProjectileWindow(Gtk.Window):
                 col = (0.75, 0.10, 0.95)
             elif self.proj_type in ("shield", "mjolnir"):
                 col = CYAN_GLOW
+            elif self.proj_type == "web":
+                col = (0.92, 0.96, 1.0)
             else:
                 col = FIRE_ORANGE
             ctx.set_source_rgba(col[0], col[1], col[2], self.shockwave_alpha)
@@ -236,21 +257,78 @@ class DesktopProjectileWindow(Gtk.Window):
             ctx.stroke()
 
         if self.state == "EXPLODING":
-            # Explosion blast
-            rad = 12.0 + self.explosion_frame * 3.2
-            alpha = max(0.0, 1.0 - self.explosion_frame / 14.0)
-            pat = cairo.RadialGradient(self.half_size, self.half_size, 2, self.half_size, self.half_size, rad)
-            if self.proj_type == "power_blast":
-                pat.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, alpha)
-                pat.add_color_stop_rgba(0.4, 0.95, 0.20, 1.0, alpha * 0.9)
-                pat.add_color_stop_rgba(1.0, 0.50, 0.05, 0.85, 0.0)
+            if self.proj_type == "web":
+                # Expanding intricate spider-web net blossom
+                net_rad = 12.0 + self.explosion_frame * 4.5
+                alpha = max(0.0, 1.0 - self.explosion_frame / 20.0)
+                ctx.save()
+                ctx.translate(self.half_size, self.half_size)
+
+                # Outer sticky silk splash droplets
+                ctx.set_source_rgba(0.95, 0.98, 1.0, alpha * 0.75)
+                for di in range(12):
+                    dang = di * (math.pi / 6.0) + 0.15
+                    d_dist = net_rad * 1.15
+                    ctx.arc(math.cos(dang) * d_dist, math.sin(dang) * d_dist, 2.2, 0, 2 * math.pi)
+                    ctx.fill()
+
+                # 12 Radiating structural web spokes
+                ctx.set_source_rgba(1.0, 1.0, 1.0, alpha * 0.95)
+                ctx.set_line_width(1.8)
+                ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+                spoke_count = 12
+                for i in range(spoke_count):
+                    ang = i * (2 * math.pi / spoke_count)
+                    ctx.move_to(0, 0)
+                    ctx.line_to(math.cos(ang) * net_rad, math.sin(ang) * net_rad)
+                    ctx.stroke()
+
+                # 4 Concentric geometric web spiral rings with catenary drooping curves
+                ctx.set_source_rgba(0.88, 0.94, 1.0, alpha * 0.85)
+                ctx.set_line_width(1.3)
+                for ring_f in [0.25, 0.50, 0.75, 1.0]:
+                    r = net_rad * ring_f
+                    ctx.new_path()
+                    for i in range(spoke_count):
+                        ang1 = i * (2 * math.pi / spoke_count)
+                        ang2 = ((i + 1) % spoke_count) * (2 * math.pi / spoke_count)
+                        p1x = math.cos(ang1) * r
+                        p1y = math.sin(ang1) * r
+                        p2x = math.cos(ang2) * r
+                        p2y = math.sin(ang2) * r
+                        mid_ang = (ang1 + ang2) / 2.0
+                        # Slight inward sag for realistic silk tension
+                        mid_r = r * 0.92
+                        cpx = math.cos(mid_ang) * mid_r
+                        cpy = math.sin(mid_ang) * mid_r
+                        if i == 0:
+                            ctx.move_to(p1x, p1y)
+                        ctx.curve_to(cpx, cpy, cpx, cpy, p2x, p2y)
+                        # Sticky glue node at each intersection
+                        ctx.save()
+                        ctx.set_source_rgba(1.0, 1.0, 1.0, alpha)
+                        ctx.arc(p1x, p1y, 1.8, 0, 2 * math.pi)
+                        ctx.fill()
+                        ctx.restore()
+                    ctx.close_path()
+                    ctx.stroke()
+                ctx.restore()
             else:
-                pat.add_color_stop_rgba(0.0, 1.0, 1.0, 0.9, alpha)
-                pat.add_color_stop_rgba(0.4, 1.0, 0.5, 0.1, alpha * 0.8)
-                pat.add_color_stop_rgba(1.0, 0.8, 0.1, 0.0, 0.0)
-            ctx.set_source(pat)
-            ctx.arc(self.half_size, self.half_size, rad, 0, 2 * math.pi)
-            ctx.fill()
+                # Explosion blast
+                rad = 12.0 + self.explosion_frame * 3.2
+                alpha = max(0.0, 1.0 - self.explosion_frame / 14.0)
+                pat = cairo.RadialGradient(self.half_size, self.half_size, 2, self.half_size, self.half_size, rad)
+                if self.proj_type == "power_blast":
+                    pat.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, alpha)
+                    pat.add_color_stop_rgba(0.4, 0.95, 0.20, 1.0, alpha * 0.9)
+                    pat.add_color_stop_rgba(1.0, 0.50, 0.05, 0.85, 0.0)
+                else:
+                    pat.add_color_stop_rgba(0.0, 1.0, 1.0, 0.9, alpha)
+                    pat.add_color_stop_rgba(0.4, 1.0, 0.5, 0.1, alpha * 0.8)
+                    pat.add_color_stop_rgba(1.0, 0.8, 0.1, 0.0, 0.0)
+                ctx.set_source(pat)
+                ctx.arc(self.half_size, self.half_size, rad, 0, 2 * math.pi)
+                ctx.fill()
             return False
 
         # Motion trail
@@ -390,3 +468,60 @@ class DesktopProjectileWindow(Gtk.Window):
                 py = math.sin(ang + self.angle * 2.0) * 12.0
                 ctx.arc(px, py, 2.0, 0, 2 * math.pi)
                 ctx.fill()
+
+        elif self.proj_type == "web":
+            # Spider-Man High-Velocity Spun Web Missile & Spiral Silk Stream
+            ctx.save()
+
+            # Trailing aerodynamic silk wisps extending behind projectile
+            ctx.set_source_rgba(0.92, 0.96, 1.0, 0.70 * alpha)
+            ctx.set_line_width(1.4)
+            for trail_ang, trail_len in [(-2.7, 24.0), (-3.14, 30.0), (-3.6, 22.0)]:
+                ctx.new_path()
+                ctx.move_to(0, 0)
+                tx1 = math.cos(trail_ang) * (trail_len * 0.5)
+                ty1 = math.sin(trail_ang) * (trail_len * 0.5) + math.sin(self.angle * 6.0) * 3.5
+                tx2 = math.cos(trail_ang) * trail_len
+                ty2 = math.sin(trail_ang) * trail_len + math.sin(self.angle * 6.0 + 1.2) * 5.0
+                ctx.curve_to(tx1, ty1, tx1, ty1, tx2, ty2)
+                ctx.stroke()
+
+            # Spinning Web Core
+            ctx.rotate(self.angle * 4.0)
+
+            # Outer luminous silk halo
+            ctx.set_source_rgba(0.85, 0.92, 1.0, 0.35 * alpha)
+            ctx.arc(0, 0, 15.0, 0, 2 * math.pi)
+            ctx.fill()
+
+            # Central coiled web core with bright silk density
+            pat_core = cairo.RadialGradient(0, 0, 2, 0, 0, 9.0)
+            pat_core.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, 1.0 * alpha)
+            pat_core.add_color_stop_rgba(0.65, 0.90, 0.95, 1.0, 0.95 * alpha)
+            pat_core.add_color_stop_rgba(1.0, 0.70, 0.85, 1.0, 0.40 * alpha)
+            ctx.set_source(pat_core)
+            ctx.arc(0, 0, 9.0, 0, 2 * math.pi)
+            ctx.fill()
+
+            # 8 High-tensile radial web filaments
+            ctx.set_source_rgba(0.95, 0.98, 1.0, 0.95 * alpha)
+            ctx.set_line_width(1.6)
+            for rad_ang in [0.0, 0.785, 1.57, 2.356, 3.14, 3.927, 4.712, 5.498]:
+                ctx.move_to(0, 0)
+                ctx.line_to(math.cos(rad_ang) * 14.0, math.sin(rad_ang) * 14.0)
+                ctx.stroke()
+
+            # Octagonal bounding silk tension ring
+            ctx.new_path()
+            for i in range(8):
+                ang = i * (math.pi / 4.0)
+                px = math.cos(ang) * 12.0
+                py = math.sin(ang) * 12.0
+                if i == 0:
+                    ctx.move_to(px, py)
+                else:
+                    ctx.line_to(px, py)
+            ctx.close_path()
+            ctx.stroke()
+
+            ctx.restore()

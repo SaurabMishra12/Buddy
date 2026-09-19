@@ -297,6 +297,8 @@ class OverlayWindow:
             self.window.connect("scroll-event", on_scroll)
 
         self.click_through = False
+        self._last_wx: Optional[int] = None
+        self._last_wy: Optional[int] = None
 
     def set_hitbox_mask(self, radius: float = 54.0) -> None:
         """Sets active clickable input region around center, letting rest of screen pass clicks through."""
@@ -326,7 +328,10 @@ class OverlayWindow:
         """Positions window so (HALF_SIZE, HALF_SIZE) aligns exactly with (center_x, center_y)."""
         wx = int(center_x - self.half_size)
         wy = int(center_y - self.half_size)
-        self.window.move(wx, wy)
+        if wx != self._last_wx or wy != self._last_wy:
+            self.window.move(wx, wy)
+            self._last_wx = wx
+            self._last_wy = wy
 
     def query_pointer(self) -> Tuple[float, float]:
         """Global pointer coordinates."""
