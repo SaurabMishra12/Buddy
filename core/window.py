@@ -195,6 +195,263 @@ class SkyStrikeWindow(Gtk.Window):
         return False
 
 
+class WebRopeWindow(Gtk.Window):
+    """Full-screen/dynamic transparent click-through window for unbroken desktop web ropes.
+    Eliminates all window-border clipping by spanning the exact region between start and end coordinates.
+    Used for:
+    1. Spider-Man web-swinging and upside-down hanging (hand -> ceiling anchor).
+    2. Spider-Man web throw projectile silk rope (wrist -> projectile/target).
+    """
+
+    def __init__(
+        self,
+        start_getter: Callable[[], Tuple[float, float]],
+        end_getter: Callable[[], Tuple[float, float]],
+        rope_style: str = "swing",  # "swing" or "throw"
+        alpha_getter: Optional[Callable[[], float]] = None
+    ):
+        super().__init__(type=Gtk.WindowType.TOPLEVEL)
+        self.set_title("BuddyWebRope")
+        self.set_decorated(False)
+        self.set_app_paintable(True)
+        self.set_accept_focus(False)
+        self.set_keep_above(True)
+        self.set_skip_taskbar_hint(True)
+        self.set_skip_pager_hint(True)
+
+        self.start_getter = start_getter
+        self.end_getter = end_getter
+        self.rope_style = rope_style
+        self.alpha_getter = alpha_getter
+        self.anim_time = 0.0
+        self.is_destroyed = False
+
+        self.screen = Gdk.Screen.get_default()
+        if self.screen is not None:
+            visual = self.screen.get_rgba_visual()
+            if visual is not None:
+                self.set_visual(visual)
+
+        # Initial bounding box
+        p1 = self.start_getter()
+        p2 = self.end_getter()
+        self.cur_min_x, self.cur_min_y, self.cur_w, self.cur_h = self._compute_bounds(p1, p2)
+        self.set_default_size(self.cur_w, self.cur_h)
+
+        self.realize()
+        gdk_win = self.get_window()
+        if gdk_win:
+            gdk_win.set_override_redirect(True)
+            # 100% click-through
+            gdk_win.input_shape_combine_region(cairo.Region(), 0, 0)
+
+        self.move(self.cur_min_x, self.cur_min_y)
+
+        # CSS transparency override
+        if self.screen:
+            css_provider = Gtk.CssProvider()
+            css_provider.load_from_data(b"window { background-color: transparent; }")
+            Gtk.StyleContext.add_provider_for_screen(
+                self.screen, css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
+        self.connect("draw", self.on_draw)
+        self.show_all()
+
+    def _compute_bounds(self, p1: Tuple[float, float], p2: Tuple[float, float]) -> Tuple[int, int, int, int]:
+        margin = 48.0
+        min_x = min(p1[0], p2[0]) - margin
+        min_y = min(p1[1], p2[1]) - margin
+        max_x = max(p1[0], p2[0]) + margin
+        max_y = max(p1[1], p2[1]) + margin
+        w = max(64, int(max_x - min_x))
+        h = max(64, int(max_y - min_y))
+        return int(min_x), int(min_y), w, h
+
+    def update(self) -> None:
+        if self.is_destroyed:
+            return
+        self.anim_time += 0.05
+        try:
+            p1 = self.start_getter()
+            p2 = self.end_getter()
+            min_x, min_y, w, h = self._compute_bounds(p1, p2)
+            if min_x != self.cur_min_x or min_y != self.cur_min_y:
+                self.move(min_x, min_y)
+                self.cur_min_x = min_x
+                self.cur_min_y = min_y
+            if abs(w - self.cur_w) > 4 or abs(h - self.cur_h) > 4:
+                self.resize(w, h)
+                self.cur_w = w
+                self.cur_h = h
+            self.queue_draw()
+        except Exception:
+            pass
+
+    def destroy_rope(self) -> None:
+        if not self.is_destroyed:
+            self.is_destroyed = True
+            try:
+                self.destroy()
+            except Exception:
+                pass
+
+    def on_draw(self, widget, ctx: cairo.Context) -> bool:
+        if self.is_destroyed:
+            return False
+
+        try:
+            p1 = self.start_getter()
+            p2 = self.end_getter()
+        except Exception:
+            return False
+
+        ctx.save()
+        ctx.set_operator(cairo.OPERATOR_CLEAR)
+        ctx.paint()
+        ctx.restore()
+
+        ctx.set_operator(cairo.OPERATOR_OVER)
+
+        alpha = 1.0
+        if self.alpha_getter:
+            try:
+                alpha = max(0.0, min(1.0, self.alpha_getter()))
+            except Exception:
+                alpha = 1.0
+        if alpha <= 0.01:
+            return False
+
+        # Transform global coordinates to local window space
+        lx1 = p1[0] - self.cur_min_x
+        ly1 = p1[1] - self.cur_min_y
+        lx2 = p2[0] - self.cur_min_x
+        ly2 = p2[1] - self.cur_min_y
+
+        dx = lx2 - lx1
+        dy = ly2 - ly1
+        dist = math.hypot(dx, dy)
+        if dist < 3.0:
+            return False
+
+        nx = -dy / dist
+        ny = dx / dist
+
+        ctx.save()
+        ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+        ctx.set_line_join(cairo.LINE_JOIN_ROUND)
+
+        if self.rope_style == "swing":
+            # 1. CEILING ANCHOR ROSETTE (Sticky web impact splat adhering to surface)
+            ctx.save()
+            ctx.translate(lx2, ly2)
+            # Radial adhering spokes
+            ctx.set_source_rgba(0.95, 0.98, 1.0, 0.90 * alpha)
+            ctx.set_line_width(1.8)
+            for i in range(8):
+                ang = i * (math.pi / 4.0) + 0.2
+                spoke_len = 16.0 if i % 2 == 0 else 11.0
+                ctx.move_to(0, 0)
+                ctx.line_to(math.cos(ang) * spoke_len, math.sin(ang) * spoke_len)
+                ctx.stroke()
+
+            # Adhering geometric tension web ring
+            ctx.set_source_rgba(0.88, 0.94, 1.0, 0.75 * alpha)
+            ctx.set_line_width(1.3)
+            ctx.new_path()
+            for i in range(8):
+                ang = i * (math.pi / 4.0) + 0.2
+                r = 10.0 if i % 2 == 0 else 7.0
+                px = math.cos(ang) * r
+                py = math.sin(ang) * r
+                if i == 0:
+                    ctx.move_to(px, py)
+                else:
+                    ctx.line_to(px, py)
+            ctx.close_path()
+            ctx.stroke()
+
+            # Central adhesive silk anchor knot
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95 * alpha)
+            ctx.arc(0, 0, 3.5, 0, 2 * math.pi)
+            ctx.fill()
+            ctx.restore()
+
+            # 2. MULTI-LAYERED BRAIDED SILK ROPE
+            # Layer A: Soft outer luminous web shimmer
+            ctx.set_source_rgba(0.85, 0.92, 1.0, 0.40 * alpha)
+            ctx.set_line_width(4.2)
+            ctx.move_to(lx1, ly1)
+            ctx.line_to(lx2, ly2)
+            ctx.stroke()
+
+            # Layer B: Core pure white high-tensile strand
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95 * alpha)
+            ctx.set_line_width(2.2)
+            ctx.move_to(lx1, ly1)
+            ctx.line_to(lx2, ly2)
+            ctx.stroke()
+
+            # Layer C: Braided helical secondary filaments coiling around core
+            ctx.set_source_rgba(0.92, 0.98, 1.0, 0.75 * alpha)
+            ctx.set_line_width(1.1)
+            seg_len = 16.0
+            steps = max(4, int(dist / seg_len))
+            for s in range(steps):
+                t1 = s / steps
+                t2 = (s + 1) / steps
+                p1x = lx1 + dx * t1
+                p1y = ly1 + dy * t1
+                p2x = lx1 + dx * t2
+                p2y = ly1 + dy * t2
+                wave = math.sin(s * 1.5 + self.anim_time * 8.0) * 3.2
+                ctx.move_to(p1x + nx * wave, p1y + ny * wave)
+                ctx.line_to(p2x - nx * wave, p2y - ny * wave)
+                ctx.stroke()
+
+        else:
+            # "throw": HIGH-VELOCITY BRAIDED SILK STREAM (Wrist to Projectile/Target)
+            # Layer A: Outer high-velocity silk glow aura
+            ctx.set_source_rgba(0.88, 0.95, 1.0, 0.55 * alpha)
+            ctx.set_line_width(4.5)
+            ctx.move_to(lx1, ly1)
+            ctx.line_to(lx2, ly2)
+            ctx.stroke()
+
+            # Layer B: Core bright tensile silk stream
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.98 * alpha)
+            ctx.set_line_width(2.4)
+            ctx.move_to(lx1, ly1)
+            ctx.line_to(lx2, ly2)
+            ctx.stroke()
+
+            # Layer C: High-frequency braided helical coils & micro-vibration
+            ctx.set_source_rgba(0.92, 0.98, 1.0, 0.85 * alpha)
+            ctx.set_line_width(1.2)
+            seg_len = 14.0
+            steps = max(4, int(dist / seg_len))
+            for s in range(steps):
+                t1 = s / steps
+                t2 = (s + 1) / steps
+                p1x = lx1 + dx * t1
+                p1y = ly1 + dy * t1
+                p2x = lx1 + dx * t2
+                p2y = ly1 + dy * t2
+                wave1 = math.sin(s * 1.8 + self.anim_time * 20.0) * 3.4 * (1.0 - t1 * 0.3)
+                wave2 = math.cos(s * 1.8 + self.anim_time * 20.0) * 3.4 * (1.0 - t1 * 0.3)
+                ctx.move_to(p1x + nx * wave1, p1y + ny * wave1)
+                ctx.line_to(p2x + nx * wave2, p2y + ny * wave2)
+                ctx.stroke()
+
+            # Small attachment knot at wrist
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95 * alpha)
+            ctx.arc(lx1, ly1, 2.5, 0, 2 * math.pi)
+            ctx.fill()
+
+        ctx.restore()
+        return False
+
+
 class OverlayWindow:
     """Oneko-style floating interactive companion window matching Mjolnir architecture."""
 

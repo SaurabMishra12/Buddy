@@ -13,6 +13,7 @@ from gi.repository import Gtk, Gdk, GLib
 
 from core.particles import CYAN_GLOW, BLUE_GLOW, FIRE_ORANGE, FIRE_YELLOW
 from core.audio import audio_manager
+from core.window import WebRopeWindow
 
 
 class DesktopProjectileWindow(Gtk.Window):
@@ -91,12 +92,58 @@ class DesktopProjectileWindow(Gtk.Window):
         self._last_wy = initial_wy
         self.explosion_frame = 0
 
+        # Dedicated full-length web rope overlay connecting hero wrist to projectile
+        self.rope_window: Optional[WebRopeWindow] = None
+        if self.proj_type == "web":
+            try:
+                self.rope_window = WebRopeWindow(
+                    start_getter=self._get_owner_wrist,
+                    end_getter=lambda: (self.x, self.y),
+                    rope_style="throw",
+                    alpha_getter=self._get_web_alpha
+                )
+            except Exception:
+                self.rope_window = None
+
+        def _on_destroy(widget):
+            self._cleanup_rope()
+
+        self.connect("destroy", _on_destroy)
         self.connect("draw", self.on_draw)
         GLib.timeout_add(16, self.on_tick)
         self.show_all()
 
+    def _get_owner_wrist(self) -> Tuple[float, float]:
+        try:
+            hx, hy = self.owner_getter()
+            dir_mult = 1.0 if self.target_x >= hx else -1.0
+            return (hx + dir_mult * 26.0, hy - 6.0)
+        except Exception:
+            return (self.x, self.y)
+
+    def _get_web_alpha(self) -> float:
+        if self.state == "EXPLODING":
+            return max(0.0, 1.0 - self.explosion_frame / 16.0)
+        return 1.0
+
+    def _cleanup_rope(self) -> None:
+        if hasattr(self, "rope_window") and self.rope_window:
+            self.rope_window.destroy_rope()
+            self.rope_window = None
+
+    def destroy_projectile(self) -> None:
+        self._cleanup_rope()
+        try:
+            self.destroy()
+        except Exception:
+            pass
+
     def on_tick(self) -> bool:
         self.angle += self.angular_velocity
+
+        # Update full-length web rope overlay
+        if self.rope_window:
+            self.rope_window.update()
 
         # Update trail
         self.trail.insert(0, (self.half_size, self.half_size, self.angle))
@@ -162,12 +209,14 @@ class DesktopProjectileWindow(Gtk.Window):
                     audio_manager.play("smash")
                 else:
                     audio_manager.play("lightning")
+                self._cleanup_rope()
                 self.destroy()
                 return False
 
         elif self.state == "EXPLODING":
             self.explosion_frame += 1
             if self.explosion_frame > 14:
+                self._cleanup_rope()
                 self.destroy()
                 return False
 

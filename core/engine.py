@@ -108,6 +108,8 @@ class BuddyEngine:
             return False
 
         old_x, old_y = self.character.x, self.character.y
+        if hasattr(self.character, "_destroy_swing_rope"):
+            self.character._destroy_swing_rope()
         self.particles.clear()
         self.character = skin_manager.create_character(norm_id, x=old_x, y=old_y)
         self.character.scale = self.config.get("scale", 1.0)

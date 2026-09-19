@@ -13,6 +13,7 @@ import cairo
 from skins.base import BaseCharacter, CharacterState
 from core.particles import ParticleManager
 from core.projectiles import DesktopProjectileWindow
+from core.window import WebRopeWindow
 
 
 class SpiderManCharacter(BaseCharacter):
@@ -57,6 +58,41 @@ class SpiderManCharacter(BaseCharacter):
         self.web_target_x = x + 120.0
         self.web_target_y = y
 
+        # Dedicated screen-spanning web rope overlay for full unclipped swinging/hanging
+        self.rope_window: Optional[WebRopeWindow] = None
+
+    def _ensure_swing_rope(self) -> None:
+        if self.rope_window is None:
+            try:
+                def get_hand_pos():
+                    if self.is_hanging_upside_down:
+                        return (self.x, self.y + 15.0)
+                    else:
+                        dir_mult = 1.0 if self.facing_right else -1.0
+                        return (self.x + dir_mult * 8.0, self.y - 16.0)
+
+                def get_anchor_pos():
+                    return (self.anchor_x, self.anchor_y)
+
+                self.rope_window = WebRopeWindow(
+                    start_getter=get_hand_pos,
+                    end_getter=get_anchor_pos,
+                    rope_style="swing"
+                )
+            except Exception:
+                self.rope_window = None
+
+    def _destroy_swing_rope(self) -> None:
+        if self.rope_window is not None:
+            try:
+                self.rope_window.destroy_rope()
+            except Exception:
+                pass
+            self.rope_window = None
+
+    def __del__(self) -> None:
+        self._destroy_swing_rope()
+
     def trigger_ability(
         self,
         ability_name: str,
@@ -85,6 +121,8 @@ class SpiderManCharacter(BaseCharacter):
             self.swing_angle = math.atan2(self.x - self.anchor_x, self.y - self.anchor_y)
             self.swing_vel = (1.0 if target_x >= self.x else -1.0) * random.uniform(1.8, 2.8)
             self.facing_right = (target_x >= self.x)
+
+            self._ensure_swing_rope()
 
             audio_mgr.play("thwip")
             particle_mgr.burst_sparks(wrist_x, wrist_y, count=6, color=(0.95, 0.98, 1.0), size=2.5)
@@ -120,6 +158,7 @@ class SpiderManCharacter(BaseCharacter):
             return True
 
         elif ability_name in ("spider_sense", "sense"):
+            self._destroy_swing_rope()
             self.spider_sense_active = True
             self.spider_sense_timer = time.time() + 1.5
             self.eye_squint = -0.5  # Eyes widen in sudden alert
@@ -134,6 +173,7 @@ class SpiderManCharacter(BaseCharacter):
             return True
 
         elif ability_name in ("perch", "crouch"):
+            self._destroy_swing_rope()
             self.is_swinging = False
             self.is_hanging_upside_down = False
             self.is_perched = True
@@ -145,6 +185,7 @@ class SpiderManCharacter(BaseCharacter):
             return True
 
         elif ability_name in ("wall_crawl", "crawl"):
+            self._destroy_swing_rope()
             self.is_swinging = False
             self.is_hanging_upside_down = False
             self.is_wall_crawling = True
@@ -161,6 +202,7 @@ class SpiderManCharacter(BaseCharacter):
             self.hang_end_time = time.time() + 2.2
             self.anchor_x = self.x
             self.anchor_y = max(20.0, self.y - 160.0)
+            self._ensure_swing_rope()
             audio_mgr.play("thwip")
             particle_mgr.burst_sparks(self.x, self.y + 20, count=18, color=(0.95, 0.98, 1.0), size=3.2)
             particle_mgr.shockwave(self.x, self.y + 20, max_radius=70.0, color=(0.95, 0.98, 1.0))
@@ -213,18 +255,25 @@ class SpiderManCharacter(BaseCharacter):
 
         # UPSIDE-DOWN HANG STATE
         if self.is_hanging_upside_down:
+            self._ensure_swing_rope()
+            if self.rope_window:
+                self.rope_window.update()
             self.state = CharacterState.IDLE
             self.vx = 0.0
             self.vy = 0.0
             self.tilt = math.pi  # Full upside down orientation
             if now >= self.hang_end_time:
                 self.is_hanging_upside_down = False
+                self._destroy_swing_rope()
                 self.vy = 4.0
                 audio_mgr.play("swoosh")
             return
 
         # PENDULUM WEB-SWINGING DYNAMICS
         if self.is_swinging:
+            self._ensure_swing_rope()
+            if self.rope_window:
+                self.rope_window.update()
             self.state = CharacterState.FLY
             # Pendulum gravity acceleration: theta'' = - (g / L) * sin(theta)
             gravity = 22.0
@@ -246,12 +295,16 @@ class SpiderManCharacter(BaseCharacter):
             if (abs(self.swing_vel) < 0.4 and abs(self.swing_angle) > 0.45) or self.y >= ground_y - 10.0:
                 # Release web line and transition to graceful aerial leap
                 self.is_swinging = False
+                self._destroy_swing_rope()
                 self.vx = self.swing_vel * 35.0
                 self.vy = -abs(self.swing_vel) * 20.0
                 audio_mgr.play("swoosh")
                 particle_mgr.burst_sparks(self.x, self.y, count=4, color=(0.92, 0.96, 1.0), size=2.2)
 
             return
+
+        if self.rope_window is not None:
+            self._destroy_swing_rope()
 
         # WALL-CRAWL STATE
         near_left = (self.x <= min_x + 65.0)
@@ -327,70 +380,43 @@ class SpiderManCharacter(BaseCharacter):
         is_firing_web = (now < self.web_shoot_timer)
 
         # -------------------------------------------------------------
-        # WORLD-SPACE WEB LINES (Swinging, Hanging, or Web Throw Stream)
+        # LOCAL WEB ATTACHMENT CUES (Full screen rope handled by WebRopeWindow)
         # -------------------------------------------------------------
-        if self.is_swinging or self.is_hanging_upside_down:
+        if self.is_swinging:
+            # Local silk grip knot at Spidey's hand
+            dir_mult = 1.0 if self.facing_right else -1.0
+            hx = self.x + dir_mult * 6.0
+            hy = self.y - 16.0
             ctx.save()
-            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
-            # Outer web shimmer
-            ctx.set_source_rgba(0.85, 0.92, 1.0, 0.45)
-            ctx.set_line_width(3.2)
-            ctx.move_to(self.x, self.y - 15.0 if not self.is_hanging_upside_down else self.y + 15.0)
-            ctx.line_to(self.anchor_x, self.anchor_y)
-            ctx.stroke()
-            # Core bright silk strand
             ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95)
-            ctx.set_line_width(1.8)
-            ctx.move_to(self.x, self.y - 15.0 if not self.is_hanging_upside_down else self.y + 15.0)
-            ctx.line_to(self.anchor_x, self.anchor_y)
+            ctx.arc(hx, hy, 3.2, 0, 2 * math.pi)
+            ctx.fill()
+            ctx.set_source_rgba(0.9, 0.96, 1.0, 0.75)
+            ctx.arc(hx, hy, 5.0, 0, 2 * math.pi)
             ctx.stroke()
             ctx.restore()
 
-        elif is_firing_web and hasattr(self, 'web_target_x'):
-            # Authentic continuous high-velocity tensile silk stream from wrist to target
+        elif self.is_hanging_upside_down:
+            # Web line grip at Spidey's boots
+            hy = self.y + 15.0
             ctx.save()
-            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95)
+            ctx.arc(self.x, hy, 3.2, 0, 2 * math.pi)
+            ctx.fill()
+            ctx.restore()
+
+        elif is_firing_web and hasattr(self, 'web_target_x'):
+            # Wrist web-shooter muzzle flash and local silk ejection spark
             dir_mult = 1.0 if self.facing_right else -1.0
             wx = self.x + dir_mult * 28.0
             wy = self.y - 8.0
-            tx = self.web_target_x
-            ty = self.web_target_y
-
-            # Outer silk glow
-            ctx.set_source_rgba(0.88, 0.95, 1.0, 0.50)
-            ctx.set_line_width(3.5)
-            ctx.move_to(wx, wy)
-            ctx.line_to(tx, ty)
-            ctx.stroke()
-
-            # Core bright tensile silk strand
-            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95)
-            ctx.set_line_width(1.8)
-            ctx.move_to(wx, wy)
-            ctx.line_to(tx, ty)
-            ctx.stroke()
-
-            # Braided aerodynamic helical secondary filaments
-            ctx.set_source_rgba(0.92, 0.98, 1.0, 0.70)
-            ctx.set_line_width(1.0)
-            dx = tx - wx
-            dy = ty - wy
-            dist = math.hypot(dx, dy)
-            if dist > 5.0:
-                nx = -dy / dist
-                ny = dx / dist
-                steps = max(6, min(18, int(dist / 20.0)))
-                for s in range(steps):
-                    t1 = s / steps
-                    t2 = (s + 1) / steps
-                    p1x = wx + dx * t1
-                    p1y = wy + dy * t1
-                    p2x = wx + dx * t2
-                    p2y = wy + dy * t2
-                    wave = math.sin(s * 1.8 + self.anim_time * 16.0) * 3.5 * (1.0 - t1 * 0.4)
-                    ctx.move_to(p1x + nx * wave, p1y + ny * wave)
-                    ctx.line_to(p2x - nx * wave, p2y - ny * wave)
-                    ctx.stroke()
+            ctx.save()
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.98)
+            ctx.arc(wx, wy, 3.0, 0, 2 * math.pi)
+            ctx.fill()
+            ctx.set_source_rgba(0.90, 0.96, 1.0, 0.65)
+            ctx.arc(wx, wy, 5.5, 0, 2 * math.pi)
+            ctx.fill()
             ctx.restore()
 
         # -------------------------------------------------------------

@@ -19,6 +19,8 @@ from core.particles import ParticleManager
 from core.audio import audio_manager
 from core.config import ConfigManager
 from core.engine import BuddyEngine
+from core.window import WebRopeWindow
+from core.projectiles import DesktopProjectileWindow
 
 
 class MockWindow:
@@ -198,6 +200,94 @@ class TestSpiderManAndRealisticDragon(unittest.TestCase):
         engine.trigger_signature_ability()
         self.assertTrue(engine.character.is_hanging_upside_down)
 
+    def test_web_rope_window_direct_bounds_and_render(self):
+        """Verify WebRopeWindow computes full bounding box, click-through, and renders unclipped."""
+        pos1 = [200.0, 500.0]
+        pos2 = [800.0, 50.0]
+
+        rope_win = WebRopeWindow(
+            start_getter=lambda: (pos1[0], pos1[1]),
+            end_getter=lambda: (pos2[0], pos2[1]),
+            rope_style="swing"
+        )
+        self.assertFalse(rope_win.is_destroyed)
+        self.assertLessEqual(rope_win.cur_min_x, 200.0 - 40.0)
+        self.assertLessEqual(rope_win.cur_min_y, 50.0 - 40.0)
+        self.assertGreaterEqual(rope_win.cur_w, 600)
+        self.assertGreaterEqual(rope_win.cur_h, 450)
+
+        # Move points and update
+        pos1[0] = 300.0
+        rope_win.update()
+
+        # Clean disposal
+        rope_win.destroy_rope()
+        self.assertTrue(rope_win.is_destroyed)
+
+    def test_spiderman_swing_rope_full_desktop_integration(self):
+        """Verify SpiderManCharacter manages WebRopeWindow across swinging and upside-down hang."""
+        spidey = SpiderManCharacter(500.0, 500.0)
+        self.assertIsNone(spidey.rope_window)
+
+        # 1. Trigger swing
+        spidey.trigger_ability("web_swing", 800.0, 500.0, self.particles, audio_manager)
+        self.assertTrue(spidey.is_swinging)
+        self.assertIsNotNone(spidey.rope_window)
+        self.assertFalse(spidey.rope_window.is_destroyed)
+        self.assertEqual(spidey.rope_window.rope_style, "swing")
+
+        # Update while swinging
+        for _ in range(5):
+            spidey.update(0.016, 800.0, 500.0, self.bounds, self.particles, audio_manager, self.config)
+        self.assertIsNotNone(spidey.rope_window)
+
+        # Trigger perch -> should cleanly destroy swing rope
+        spidey.trigger_ability("perch", 500.0, 500.0, self.particles, audio_manager)
+        self.assertFalse(spidey.is_swinging)
+        self.assertIsNone(spidey.rope_window)
+
+        # 2. Trigger upside-down hang
+        spidey.trigger_ability("upside_down_hang", 500.0, 500.0, self.particles, audio_manager)
+        self.assertTrue(spidey.is_hanging_upside_down)
+        self.assertIsNotNone(spidey.rope_window)
+        self.assertEqual(spidey.rope_window.rope_style, "swing")
+
+        # End hang -> rope destroyed
+        spidey.is_hanging_upside_down = False
+        spidey.update(0.016, 500.0, 500.0, self.bounds, self.particles, audio_manager, self.config)
+        self.assertIsNone(spidey.rope_window)
+
+    def test_spiderman_web_throw_rope_lifecycle(self):
+        """Verify DesktopProjectileWindow creates and tracks full unclipped rope during web throw."""
+        spidey = SpiderManCharacter(400.0, 400.0)
+        proj = DesktopProjectileWindow(
+            proj_type="web",
+            start_x=426.0,
+            start_y=394.0,
+            target_x=900.0,
+            target_y=200.0,
+            owner_getter=lambda: (spidey.x, spidey.y),
+            speed=30.0
+        )
+        self.assertIsNotNone(proj.rope_window)
+        self.assertFalse(proj.rope_window.is_destroyed)
+        self.assertEqual(proj.rope_window.rope_style, "throw")
+
+        # Tick outbound travel
+        for _ in range(3):
+            proj.on_tick()
+        self.assertFalse(proj.rope_window.is_destroyed)
+
+        # Collide and trigger net explosion
+        proj._trigger_collision()
+        self.assertEqual(proj.state, "EXPLODING")
+        self.assertGreater(proj._get_web_alpha(), 0.0)
+
+        # Destroy projectile -> verifies rope cleanup
+        proj.destroy_projectile()
+        self.assertIsNone(proj.rope_window)
+
 
 if __name__ == "__main__":
     unittest.main()
+
