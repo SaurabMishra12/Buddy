@@ -6,9 +6,11 @@
   "speed": 1.3,
   "canFly": true,
   "abilities": [
+    "reactor_repulsor",
+    "unibeam",
     "repulsor_blast",
-    "flight",
-    "air_dash"
+    "air_dash",
+    "flight"
   ],
   "sound_theme": "jet"
 }

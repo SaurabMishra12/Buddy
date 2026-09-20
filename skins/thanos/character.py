@@ -25,6 +25,8 @@ class ThanosCharacter(BaseCharacter):
         self.gem_pulse = 0.0
         self.is_snapping = False
         self.snap_end_time = 0.0
+        self.stride = 0.0
+        self.fly_phase = 0.0
 
         # Time Stone chronal state
         self.is_time_active = False
@@ -189,11 +191,22 @@ class ThanosCharacter(BaseCharacter):
             self.vx += (dx / dist) * min(dist * 0.04, accel)
             self.vy += (dy / dist) * min(dist * 0.04, accel)
             self.state = CharacterState.FLY
+            self.fly_phase += 0.08
+            self.stride += 0.12
+            if random.random() < 0.22:
+                particle_mgr.burst_sparks(
+                    self.x + random.uniform(-10, 10),
+                    self.y + 24.0,
+                    count=1,
+                    color=(0.10, 0.60, 1.0),
+                    size=2.2
+                )
         else:
             # Peaceful petting/touch deadzone: stays still and calm!
             self.state = CharacterState.HOVER
             self.vx *= 0.70
             self.vy *= 0.70
+            self.stride *= 0.85
 
         self.vx *= 0.90
         self.vy *= 0.90
@@ -225,17 +238,7 @@ class ThanosCharacter(BaseCharacter):
         clone_alpha: float = 1.0
     ) -> None:
         """Renders the detailed Titan body, armor, head, and gauntlet."""
-        # 1. Armored Legs & Golden Battle Greaves
-        if is_clone:
-            ctx.set_source_rgba(0.20, 0.08, 0.12, clone_alpha)
-        else:
-            ctx.set_source_rgb(0.16, 0.18, 0.24)
-        ctx.rectangle(-11, 12, 9, 16)
-        ctx.rectangle(2, 12, 9, 16)
-        ctx.fill()
-
-        # Sculpted Golden Shin Guards
-        pat_gold = cairo.LinearGradient(0, 18, 0, 30)
+        pat_gold = cairo.LinearGradient(0, -18, 0, 30)
         if is_clone:
             pat_gold.add_color_stop_rgba(0.0, 0.95, 0.35, 0.40, clone_alpha)
             pat_gold.add_color_stop_rgba(0.5, 0.75, 0.20, 0.25, clone_alpha)
@@ -245,27 +248,80 @@ class ThanosCharacter(BaseCharacter):
             pat_gold.add_color_stop_rgb(0.5, 0.75, 0.58, 0.16)
             pat_gold.add_color_stop_rgb(1.0, 0.45, 0.32, 0.08)
 
-        ctx.set_source(pat_gold)
-        ctx.rectangle(-12, 20, 10, 10)
-        ctx.rectangle(2, 20, 10, 10)
-        ctx.fill()
-        if is_clone:
-            ctx.set_source_rgba(0.95, 0.15, 0.25, clone_alpha * 0.8)
+        # 1. Armored Legs & Golden Battle Greaves
+        # Calculate dynamic leg angles based on movement state
+        if self.state == CharacterState.FLY:
+            # Trailing imperial levitation posture
+            rot_l = -0.16 - self.tilt * 0.4
+            rot_r = 0.22 + self.tilt * 0.6 + math.sin(self.anim_time * 3.0) * 0.06
+        elif self.state in (CharacterState.WALK, CharacterState.RUN):
+            # Heavy titan battle stride
+            rot_l = math.sin(self.stride) * 0.35
+            rot_r = -math.sin(self.stride) * 0.35
         else:
-            ctx.set_source_rgb(0.35, 0.25, 0.08)
-        ctx.set_line_width(1.0)
-        ctx.rectangle(-12, 20, 10, 10)
-        ctx.rectangle(2, 20, 10, 10)
-        ctx.stroke()
+            # Hover breathing bob
+            rot_l = math.sin(self.anim_time * 2.0) * 0.04
+            rot_r = -math.sin(self.anim_time * 2.0) * 0.04
 
-        # Heavy battle boots
-        if is_clone:
-            ctx.set_source_rgba(0.25, 0.10, 0.15, clone_alpha)
-        else:
-            ctx.set_source_rgb(0.20, 0.22, 0.28)
-        ctx.rectangle(-13, 29, 12, 5)
-        ctx.rectangle(1, 29, 12, 5)
-        ctx.fill()
+        legs_spec = [
+            (-6.5, rot_l),  # Left leg (pivot at -6.5, 12)
+            (6.5, rot_r),   # Right leg (pivot at 6.5, 12)
+        ]
+
+        for hx, rot in legs_spec:
+            ctx.save()
+            ctx.translate(hx, 12)
+            ctx.rotate(rot)
+
+            # Thigh & shin
+            if is_clone:
+                ctx.set_source_rgba(0.20, 0.08, 0.12, clone_alpha)
+            else:
+                ctx.set_source_rgb(0.16, 0.18, 0.24)
+            ctx.rectangle(-4.5, 0, 9, 16)
+            ctx.fill()
+
+            # Sculpted Golden Shin Guard
+            pat_shin = cairo.LinearGradient(-4.5, 8, 4.5, 18)
+            if is_clone:
+                pat_shin.add_color_stop_rgba(0.0, 0.95, 0.35, 0.40, clone_alpha)
+                pat_shin.add_color_stop_rgba(0.5, 0.75, 0.20, 0.25, clone_alpha)
+                pat_shin.add_color_stop_rgba(1.0, 0.45, 0.10, 0.15, clone_alpha)
+            else:
+                pat_shin.add_color_stop_rgb(0.0, 0.95, 0.82, 0.28)
+                pat_shin.add_color_stop_rgb(0.5, 0.75, 0.58, 0.16)
+                pat_shin.add_color_stop_rgb(1.0, 0.45, 0.32, 0.08)
+
+            ctx.set_source(pat_shin)
+            ctx.rectangle(-5.0, 8, 10, 10)
+            ctx.fill()
+            if is_clone:
+                ctx.set_source_rgba(0.95, 0.15, 0.25, clone_alpha * 0.8)
+            else:
+                ctx.set_source_rgb(0.35, 0.25, 0.08)
+            ctx.set_line_width(1.0)
+            ctx.rectangle(-5.0, 8, 10, 10)
+            ctx.stroke()
+
+            # Heavy battle boot
+            if is_clone:
+                ctx.set_source_rgba(0.25, 0.10, 0.15, clone_alpha)
+            else:
+                ctx.set_source_rgb(0.20, 0.22, 0.28)
+            ctx.rectangle(-6.0, 17, 12, 5.5)
+            ctx.fill()
+
+            # Space Stone Levitation Rift beneath boot in flight
+            if self.state == CharacterState.FLY and not is_clone:
+                pat_space = cairo.RadialGradient(0, 22, 1, 0, 22, 12)
+                pat_space.add_color_stop_rgba(0.0, 0.25, 0.85, 1.0, 0.80 * self.gem_pulse)
+                pat_space.add_color_stop_rgba(0.45, 0.60, 0.18, 0.95, 0.45 * self.gem_pulse)
+                pat_space.add_color_stop_rgba(1.0, 0.10, 0.05, 0.30, 0.0)
+                ctx.set_source(pat_space)
+                ctx.arc(0, 22, 12, 0, 2 * math.pi)
+                ctx.fill()
+
+            ctx.restore()
 
         # 2. Imposing Golden Torso Cuirass with Obsidian Inlays
         ctx.set_source(pat_gold)
@@ -367,19 +423,29 @@ class ThanosCharacter(BaseCharacter):
         ctx.fill()
 
         # 4. Right Arm (Battle gauntlet)
+        ctx.save()
+        arm_rot = 0.0
+        if self.state in (CharacterState.WALK, CharacterState.RUN):
+            arm_rot = -math.sin(self.stride) * 0.28
+        elif self.state == CharacterState.FLY:
+            arm_rot = -0.20 + self.tilt * 0.35
+        ctx.translate(-16, -10)
+        ctx.rotate(arm_rot)
         if is_clone:
             ctx.set_source_rgba(0.20, 0.08, 0.12, clone_alpha)
         else:
             ctx.set_source_rgb(0.16, 0.18, 0.24)
-        ctx.rectangle(-18, -10, 5, 18)
+        ctx.rectangle(-2.5, 0, 5, 18)
         ctx.fill()
         ctx.set_source(pat_gold)
-        ctx.rectangle(-19, 0, 6, 7)
+        ctx.rectangle(-3.0, 10, 6, 7)
         ctx.fill()
+        ctx.restore()
 
         # 5. The INFINITY GAUNTLET (Raised Forward on Left Arm)
         ctx.save()
-        ctx.translate(14, -5)
+        gauntlet_lift = -2.5 if self.state == CharacterState.FLY else 0.0
+        ctx.translate(14, -5 + gauntlet_lift)
 
         # Arm
         if is_clone:
@@ -425,6 +491,12 @@ class ThanosCharacter(BaseCharacter):
         ]
 
         for gx, gy, rad, col in gems:
+            # Space stone cosmic flight flare
+            if col == (0.10, 0.60, 1.00) and self.state == CharacterState.FLY and not is_clone:
+                ctx.set_source_rgba(0.10, 0.70, 1.0, 0.80 * gp)
+                ctx.arc(gx, gy, rad * 3.2, 0, 2 * math.pi)
+                ctx.fill()
+
             # Outer stone glow aura
             ctx.set_source_rgba(col[0], col[1], col[2], 0.45 * gp * clone_alpha)
             ctx.arc(gx, gy, rad * 2.2, 0, 2 * math.pi)
@@ -453,64 +525,51 @@ class ThanosCharacter(BaseCharacter):
             # Center mandala at the green Time Stone knuckle (17, 4.0)
             ctx.translate(17, 4.0)
 
-            t_pulse = 0.8 + 0.2 * math.sin(self.anim_time * 6.0)
+            t_pulse = 0.8 + 0.2 * math.sin(self.anim_time * 5.0)
+            ctx.scale(t_pulse, t_pulse)
 
-            # 1. Concentric Chronal Pulse Wavelets expanding outward
-            for r_ring in [12.0, 20.0, 28.0]:
-                wave_r = (r_ring + (self.anim_time * 18.0) % 18.0)
-                alpha_wave = max(0.0, 0.7 - (wave_r / 46.0))
-                ctx.set_source_rgba(0.15, 0.95, 0.35, alpha_wave * t_pulse)
-                ctx.set_line_width(1.2)
-                ctx.arc(0, 0, wave_r, 0, 2 * math.pi)
-                ctx.stroke()
-
-            # 2. Outer Rotating Chronal Runic Circle (Clockwise)
-            ctx.save()
-            ctx.rotate(self.anim_time * 2.8)
+            # 1. Outer Runed Chronal Ring
             ctx.set_source_rgba(0.15, 0.95, 0.35, 0.85 * t_pulse)
             ctx.set_line_width(1.8)
             ctx.arc(0, 0, 22.0, 0, 2 * math.pi)
             ctx.stroke()
 
-            # 12 Runic perimeter tick marks
-            for i in range(12):
-                ang = i * (math.pi / 6.0)
-                ctx.move_to(19.0 * math.cos(ang), 19.0 * math.sin(ang))
-                ctx.line_to(23.5 * math.cos(ang), 23.5 * math.sin(ang))
-            ctx.stroke()
-            ctx.restore()
-
-            # 3. Inner Counter-Rotating Mystic Square Mandala
+            # 2. Interlocking Concentric Square Glyphs (Doctor Strange Geometry)
             ctx.save()
-            ctx.rotate(-self.anim_time * 3.2)
-            ctx.set_source_rgba(0.40, 1.0, 0.60, 0.90 * t_pulse)
+            ctx.rotate(self.anim_time * 1.8)
+            ctx.set_source_rgba(0.25, 1.0, 0.45, 0.70 * t_pulse)
             ctx.set_line_width(1.4)
-            # Two interlocking squares forming an octagram
-            s_half = 11.0
-            ctx.rectangle(-s_half, -s_half, s_half * 2, s_half * 2)
+            sq_size = 14.0
+            ctx.rectangle(-sq_size, -sq_size, sq_size * 2, sq_size * 2)
             ctx.stroke()
             ctx.rotate(math.pi / 4.0)
-            ctx.rectangle(-s_half, -s_half, s_half * 2, s_half * 2)
+            ctx.rectangle(-sq_size, -sq_size, sq_size * 2, sq_size * 2)
             ctx.stroke()
             ctx.restore()
 
-            # 4. Radiant Emerald Core Flash
-            pat_core = cairo.RadialGradient(0, 0, 1.0, 0, 0, 14.0)
-            pat_core.add_color_stop_rgba(0.0, 0.80, 1.0, 0.80, 0.95)
+            # 3. Inner Reverse-Spinning Chronal Gear
+            ctx.save()
+            ctx.rotate(-self.anim_time * 2.5)
+            ctx.set_source_rgba(0.40, 1.0, 0.55, 0.80 * t_pulse)
+            ctx.set_line_width(1.2)
+            ctx.arc(0, 0, 10.0, 0, 2 * math.pi)
+            ctx.stroke()
+            # Cogs
+            for i in range(12):
+                ang = i * (math.pi / 6.0)
+                ctx.move_to(9.0 * math.cos(ang), 9.0 * math.sin(ang))
+                ctx.line_to(12.0 * math.cos(ang), 12.0 * math.sin(ang))
+            ctx.stroke()
+            ctx.restore()
+
+            # 4. Central Chronal Luminous Core
+            pat_core = cairo.RadialGradient(0, 0, 1, 0, 0, 14)
+            pat_core.add_color_stop_rgba(0.0, 1.0, 1.0, 0.9, 0.95 * t_pulse)
             pat_core.add_color_stop_rgba(0.4, 0.15, 0.95, 0.35, 0.70 * t_pulse)
             pat_core.add_color_stop_rgba(1.0, 0.05, 0.65, 0.20, 0.0)
             ctx.set_source(pat_core)
             ctx.arc(0, 0, 14.0, 0, 2 * math.pi)
             ctx.fill()
-
-            # 5. Mystic Chronal Rays
-            ctx.set_source_rgba(0.50, 1.0, 0.60, 0.75 * t_pulse)
-            ctx.set_line_width(1.2)
-            for i in range(8):
-                ray_ang = (i * math.pi / 4.0) + (self.anim_time * 1.5)
-                ctx.move_to(4.0 * math.cos(ray_ang), 4.0 * math.sin(ray_ang))
-                ctx.line_to(26.0 * math.cos(ray_ang), 26.0 * math.sin(ray_ang))
-            ctx.stroke()
 
             ctx.restore()
 
@@ -521,23 +580,24 @@ class ThanosCharacter(BaseCharacter):
 
         # =============================================================
         # REALITY WARP: 6 Clones Fan Out Radially and Converge into One!
+        # Clones fan out to radius 45px (scaled to 0.62x) so all 6 clones stay 100% inside 180x180 window!
         # =============================================================
         if self.is_reality_warping:
             t_rel = min(1.0, max(0.0, (now - self.reality_warp_start) / self.reality_warp_duration))
 
             # Phase Calculations:
-            # 0.0 -> 0.40: Smooth expansion outward to 85px
+            # 0.0 -> 0.40: Smooth expansion outward to 45px
             # 0.40 -> 0.68: Imposing multi-Thanos standoff (fanning out around target)
             # 0.68 -> 0.95: Rapid inward convergence & snap collapse into center
             # 0.95 -> 1.00: Full fusion shockwave at center
-            max_clone_radius = 82.0
+            max_clone_radius = 45.0
 
             if t_rel < 0.40:
                 p_out = math.sin((t_rel / 0.40) * (math.pi / 2.0))
                 current_radius = max_clone_radius * p_out
                 clone_alpha = min(0.85, (t_rel / 0.20) * 0.85)
             elif t_rel < 0.68:
-                current_radius = max_clone_radius + math.sin(self.anim_time * 3.5) * 3.0
+                current_radius = max_clone_radius + math.sin(self.anim_time * 3.5) * 2.0
                 clone_alpha = 0.85
             elif t_rel < 0.95:
                 p_in = (t_rel - 0.68) / (0.95 - 0.68)
@@ -547,7 +607,7 @@ class ThanosCharacter(BaseCharacter):
                 current_radius = 0.0
                 clone_alpha = 0.0
 
-            if current_radius > 6.0 and clone_alpha > 0.05:
+            if current_radius > 4.0 and clone_alpha > 0.05:
                 # Render 6 Reality Clones arranged symmetrically in hexagon
                 for i in range(6):
                     theta = (i * (math.pi / 3.0)) + (self.anim_time * 0.35)
@@ -557,11 +617,11 @@ class ThanosCharacter(BaseCharacter):
                     # 1. Reality energy ribbon linking clone to true Thanos
                     ctx.save()
                     ctx.set_source_rgba(0.95, 0.15, 0.25, 0.40 * clone_alpha)
-                    ctx.set_line_width(1.8)
+                    ctx.set_line_width(1.6)
                     ctx.move_to(self.x, self.y)
-                    # Wavy bezier energy arc
-                    mid_x = (self.x + self.x + cx) * 0.5 + math.sin(self.anim_time * 4.0 + i) * 8.0
-                    mid_y = (self.y + self.y + cy) * 0.5 + math.cos(self.anim_time * 4.0 + i) * 8.0
+                    # Wavy bezier energy arc with constrained wave amplitude to stay well inside window
+                    mid_x = (self.x + self.x + cx) * 0.5 + math.sin(self.anim_time * 4.0 + i) * 3.5
+                    mid_y = (self.y + self.y + cy) * 0.5 + math.cos(self.anim_time * 4.0 + i) * 3.5
                     ctx.curve_to(mid_x, mid_y, mid_x, mid_y, self.x + cx, self.y + cy)
                     ctx.stroke()
                     ctx.restore()
@@ -571,17 +631,17 @@ class ThanosCharacter(BaseCharacter):
                     ctx.translate(self.x + cx, self.y + cy)
                     ctx.rotate(self.anim_time * 2.0 + i)
                     ctx.set_source_rgba(0.95, 0.15, 0.25, 0.50 * clone_alpha)
-                    ctx.set_line_width(1.2)
-                    cube_s = 7.0
+                    ctx.set_line_width(1.0)
+                    cube_s = 4.5
                     ctx.rectangle(-cube_s, -cube_s, cube_s * 2, cube_s * 2)
                     ctx.stroke()
                     ctx.restore()
 
-                    # 3. Draw the Reality Clone figure
+                    # 3. Draw the Reality Clone figure (scaled to 0.62 to fit completely in window)
                     ctx.save()
                     ctx.translate(self.x + cx, self.y + cy)
                     ctx.rotate(self.tilt + math.sin(self.anim_time * 2.0 + i) * 0.08)
-                    ctx.scale(self.scale, self.scale)
+                    ctx.scale(self.scale * 0.62, self.scale * 0.62)
                     if not self.facing_right:
                         ctx.scale(-1.0, 1.0)
                     self._draw_titan_body(ctx, is_clone=True, clone_alpha=clone_alpha)

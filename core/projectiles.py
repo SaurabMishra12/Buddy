@@ -240,7 +240,7 @@ class DesktopProjectileWindow(Gtk.Window):
             spd = random.uniform(3.0, 8.0)
             if self.proj_type == "power_blast":
                 col = (0.85, 0.20, 1.0)
-            elif self.proj_type in ("shield", "mjolnir"):
+            elif self.proj_type in ("shield", "mjolnir", "unibeam"):
                 col = CYAN_GLOW
             else:
                 col = FIRE_YELLOW
@@ -295,7 +295,7 @@ class DesktopProjectileWindow(Gtk.Window):
             ctx.set_line_width(3.5 * self.shockwave_alpha)
             if self.proj_type == "power_blast":
                 col = (0.75, 0.10, 0.95)
-            elif self.proj_type in ("shield", "mjolnir"):
+            elif self.proj_type in ("shield", "mjolnir", "unibeam"):
                 col = CYAN_GLOW
             elif self.proj_type == "web":
                 col = (0.92, 0.96, 1.0)
@@ -339,28 +339,25 @@ class DesktopProjectileWindow(Gtk.Window):
                     r = net_rad * ring_f
                     ctx.new_path()
                     for i in range(spoke_count):
-                        ang1 = i * (2 * math.pi / spoke_count)
-                        ang2 = ((i + 1) % spoke_count) * (2 * math.pi / spoke_count)
-                        p1x = math.cos(ang1) * r
-                        p1y = math.sin(ang1) * r
-                        p2x = math.cos(ang2) * r
-                        p2y = math.sin(ang2) * r
-                        mid_ang = (ang1 + ang2) / 2.0
-                        # Slight inward sag for realistic silk tension
-                        mid_r = r * 0.92
-                        cpx = math.cos(mid_ang) * mid_r
-                        cpy = math.sin(mid_ang) * mid_r
+                        ang = i * (2 * math.pi / spoke_count)
+                        px = math.cos(ang) * r
+                        py = math.sin(ang) * r
                         if i == 0:
-                            ctx.move_to(p1x, p1y)
-                        ctx.curve_to(cpx, cpy, cpx, cpy, p2x, p2y)
-                        # Sticky glue node at each intersection
-                        ctx.save()
-                        ctx.set_source_rgba(1.0, 1.0, 1.0, alpha)
-                        ctx.arc(p1x, p1y, 1.8, 0, 2 * math.pi)
-                        ctx.fill()
-                        ctx.restore()
+                            ctx.move_to(px, py)
+                        else:
+                            prev_ang = (i - 1) * (2 * math.pi / spoke_count)
+                            mid_ang = (prev_ang + ang) * 0.5
+                            sag_r = r * 0.91
+                            ctrl_x = math.cos(mid_ang) * sag_r
+                            ctrl_y = math.sin(mid_ang) * sag_r
+                            ctx.quad_to(ctrl_x, ctrl_y, px, py)
                     ctx.close_path()
                     ctx.stroke()
+
+                # Center anchor impact knot
+                ctx.set_source_rgba(1.0, 1.0, 1.0, alpha)
+                ctx.arc(0, 0, 3.8, 0, 2 * math.pi)
+                ctx.fill()
                 ctx.restore()
             else:
                 # Explosion blast
@@ -371,6 +368,10 @@ class DesktopProjectileWindow(Gtk.Window):
                     pat.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, alpha)
                     pat.add_color_stop_rgba(0.4, 0.95, 0.20, 1.0, alpha * 0.9)
                     pat.add_color_stop_rgba(1.0, 0.50, 0.05, 0.85, 0.0)
+                elif self.proj_type in ("unibeam", "repulsor"):
+                    pat.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, alpha)
+                    pat.add_color_stop_rgba(0.35, CYAN_GLOW[0], CYAN_GLOW[1], CYAN_GLOW[2], alpha * 0.95)
+                    pat.add_color_stop_rgba(1.0, 0.05, 0.35, 0.95, 0.0)
                 else:
                     pat.add_color_stop_rgba(0.0, 1.0, 1.0, 0.9, alpha)
                     pat.add_color_stop_rgba(0.4, 1.0, 0.5, 0.1, alpha * 0.8)
@@ -497,6 +498,36 @@ class DesktopProjectileWindow(Gtk.Window):
             ctx.set_source(pat)
             ctx.arc(0, 0, rad, 0, 2 * math.pi)
             ctx.fill()
+
+        elif self.proj_type == "unibeam":
+            # Iron Man Colossal Chest Arc Reactor Unibeam
+            rad = 24.0
+            pat = cairo.RadialGradient(0, 0, 3, 0, 0, rad)
+            pat.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, alpha)
+            pat.add_color_stop_rgba(0.35, 0.35, 0.95, 1.0, 0.95 * alpha)
+            pat.add_color_stop_rgba(0.70, 0.05, 0.55, 1.0, 0.70 * alpha)
+            pat.add_color_stop_rgba(1.0, 0.0, 0.15, 0.75, 0.0)
+            ctx.set_source(pat)
+            ctx.arc(0, 0, rad, 0, 2 * math.pi)
+            ctx.fill()
+
+            # Concentric expanding pulse rings
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.90 * alpha)
+            ctx.set_line_width(2.2)
+            ctx.arc(0, 0, 9.0, 0, 2 * math.pi)
+            ctx.stroke()
+            ctx.set_source_rgba(0.20, 0.90, 1.0, 0.75 * alpha)
+            ctx.set_line_width(1.4)
+            ctx.arc(0, 0, 17.0, 0, 2 * math.pi)
+            ctx.stroke()
+
+            # Spiraling arc filaments
+            ctx.set_source_rgba(0.85, 0.98, 1.0, 0.95 * alpha)
+            for ang in [0.0, 1.57, 3.14, 4.71]:
+                px = math.cos(ang + self.angle * 3.5) * 14.0
+                py = math.sin(ang + self.angle * 3.5) * 14.0
+                ctx.arc(px, py, 2.5, 0, 2 * math.pi)
+                ctx.fill()
 
         elif self.proj_type == "power_blast":
             # Thanos Power Stone Cosmic Energy Orb

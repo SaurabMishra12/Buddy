@@ -255,8 +255,9 @@ class BuddyEngine:
             self.character.trigger_ability("thunderclap", cx, cy, self.particles, self.audio)
             self.shake.trigger(14.0)
         elif skin_id == "ironman":
-            self.character.trigger_ability("repulsor_blast", cx, cy, self.particles, self.audio)
-            self.particles.shockwave(cx, cy, max_radius=70.0, color=(0.2, 0.8, 1.0))
+            self.character.trigger_ability("unibeam", cx, cy, self.particles, self.audio)
+            self.particles.shockwave(cx, cy, max_radius=85.0, color=(0.2, 0.85, 1.0))
+            self.shake.trigger(10.0)
             self.audio.play("laser")
         elif skin_id == "harry_potter":
             for _ in range(20):
