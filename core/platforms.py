@@ -75,44 +75,8 @@ class PlatformManager:
             title="System Panel"
         ))
 
-        # 2. Virtual interactive application window ledges
-        # Default typical workspace window frames so Spider-Man always has rich interactive perches
-        w1_x = min_x + max(60.0, screen_w * 0.12)
-        w1_y = min_y + max(100.0, screen_h * 0.18)
-        w1_w = min(1200.0, screen_w * 0.76)
-        discovered.append(DesktopLedge(
-            x=w1_x,
-            y=w1_y,
-            width=w1_w,
-            height=30.0,
-            ledge_type="window",
-            title="Workspace Window"
-        ))
-
-        # Window control buttons on top right of main window
-        discovered.append(DesktopLedge(
-            x=w1_x + w1_w - 95.0,
-            y=w1_y + 4.0,
-            width=90.0,
-            height=22.0,
-            ledge_type="button",
-            title="Window Controls"
-        ))
-
-        # Secondary window frame (terminal / side dock)
-        w2_x = min_x + max(40.0, screen_w * 0.08)
-        w2_y = min_y + max(250.0, screen_h * 0.45)
-        w2_w = min(750.0, screen_w * 0.48)
-        discovered.append(DesktopLedge(
-            x=w2_x,
-            y=w2_y,
-            width=w2_w,
-            height=28.0,
-            ledge_type="window",
-            title="Terminal Window"
-        ))
-
-        # 3. AT-SPI real accessibility windows and buttons query if enabled
+        # 2. AT-SPI real accessibility windows and buttons query if enabled
+        atspi_discovered: List[DesktopLedge] = []
         if self._atspi_available:
             try:
                 import gi
@@ -142,7 +106,7 @@ class PlatformManager:
                                     rect = comp.get_extents(Atspi.CoordType.SCREEN)
                                     if rect.width > 120 and rect.height > 80:
                                         # Window top titlebar ledge
-                                        discovered.append(DesktopLedge(
+                                        atspi_discovered.append(DesktopLedge(
                                             x=rect.x,
                                             y=rect.y + 2.0,
                                             width=rect.width,
@@ -151,7 +115,7 @@ class PlatformManager:
                                             title=child.get_name() or app_name
                                         ))
                                         # Window buttons (top right corner)
-                                        discovered.append(DesktopLedge(
+                                        atspi_discovered.append(DesktopLedge(
                                             x=rect.x + rect.width - 85.0,
                                             y=rect.y + 4.0,
                                             width=80.0,
@@ -163,6 +127,30 @@ class PlatformManager:
                                 pass
             except Exception:
                 self._atspi_available = False
+
+        if atspi_discovered:
+            discovered.extend(atspi_discovered)
+        else:
+            # Fallback typical workspace window frames when no AT-SPI windows are detected (e.g. headless tests)
+            w1_x = min_x + max(60.0, screen_w * 0.12)
+            w1_y = min_y + max(100.0, screen_h * 0.18)
+            w1_w = min(1200.0, screen_w * 0.76)
+            discovered.append(DesktopLedge(
+                x=w1_x,
+                y=w1_y,
+                width=w1_w,
+                height=30.0,
+                ledge_type="window",
+                title="Workspace Window"
+            ))
+            discovered.append(DesktopLedge(
+                x=w1_x + w1_w - 95.0,
+                y=w1_y + 4.0,
+                width=90.0,
+                height=22.0,
+                ledge_type="button",
+                title="Window Controls"
+            ))
 
         self.ledges = discovered
 

@@ -110,6 +110,53 @@ class TestFluentMovementAndPlatforms(unittest.TestCase):
         self.assertIsNone(spidey.nav_target)
         self.assertEqual(spidey.nav_stage, "IDLE")
         self.assertTrue(spidey.is_perched or spidey.is_seated)
+        self.assertEqual(spidey.tilt, 0.0)
+
+    def test_spiderman_seated_upright_and_zero_corner_revolving(self):
+        """Verify Spider-Man sits straight upright (0.0 tilt) and never revolves around corners."""
+        spidey = SpiderManCharacter(300.0, 1010.0)
+
+        # 1. Sitting must have 0.0 tilt (strictly upright, not sideways or upside down)
+        spidey.trigger_ability("seat", 500.0, 500.0, self.particles, audio_manager)
+        self.assertTrue(spidey.is_seated)
+        self.assertEqual(spidey.tilt, 0.0)
+
+        # 2. Exit from wall-crawl (math.pi * 0.5) must reset tilt to 0.0
+        spidey.is_wall_crawling = True
+        spidey.tilt = math.pi * 0.5
+        spidey.x = 200.0  # Away from screen edges
+        spidey.update(0.016, 500.0, 500.0, self.bounds, self.particles, audio_manager, self.config)
+        self.assertFalse(spidey.is_wall_crawling)
+        self.assertEqual(spidey.tilt, 0.0)
+
+        # 3. Exit from upside-down hang (math.pi) must reset tilt to 0.0
+        spidey.trigger_ability("upside_down_hang", 500.0, 500.0, self.particles, audio_manager)
+        self.assertTrue(spidey.is_hanging_upside_down)
+        self.assertEqual(spidey.tilt, math.pi)
+        spidey.hang_end_time = time.time() - 0.1
+        spidey.update(0.016, 500.0, 500.0, self.bounds, self.particles, audio_manager, self.config)
+        self.assertFalse(spidey.is_hanging_upside_down)
+        self.assertEqual(spidey.tilt, 0.0)
+
+        # 4. Jump somersault / corner movement must NOT revolve continuously
+        spidey.nav_to(1850.0, 1050.0)  # Target near corner
+        spidey.nav_stage = "JUMP"
+        spidey.vx = 15.0
+        for _ in range(60):  # Simulate 1 second of jumping
+            spidey.update(0.016, 1850.0, 1050.0, self.bounds, self.particles, audio_manager, self.config)
+            # Tilt must stay within controlled athletic lean bounds (< 0.45 rad ~ 25 degrees)
+            self.assertLessEqual(abs(spidey.tilt), 0.45, f"Tilt {spidey.tilt} exceeded athletic limit!")
+
+        # 5. When arriving or seated on a ledge, hips must sit squarely (ledge.top - 8.0) and tilt 0.0
+        platform_manager.register_user_click_ledge(800.0, 600.0)
+        user_ledge = platform_manager.is_on_ledge(800.0, 600.0, tolerance=10.0)
+        self.assertIsNotNone(user_ledge)
+        spidey.x = 800.0
+        spidey.y = 600.0
+        spidey.trigger_ability("seat", 800.0, 600.0, self.particles, audio_manager)
+        self.assertTrue(spidey.is_seated)
+        self.assertEqual(spidey.tilt, 0.0)
+        self.assertAlmostEqual(spidey.y, user_ledge.top - 8.0, delta=1.0)
 
     def test_captain_america_sprint_and_shield_dash(self):
         """Verify Captain America runs then dashes with Vibranium shield."""
