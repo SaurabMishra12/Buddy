@@ -240,7 +240,7 @@ class BuddyEngine:
             self.particles.shockwave(cx, cy, max_radius=80.0, color=(1.0, 0.3, 0.1))
             self.audio.play("laser")
         elif skin_id == "dragon":
-            self.character.trigger_ability("fireball", cx, cy, self.particles, self.audio)
+            self.character.trigger_ability("fireball", self.cursor_x, self.cursor_y, self.particles, self.audio)
             self.particles.shockwave(cx, cy, max_radius=75.0, color=(1.0, 0.4, 0.0))
             self.audio.play("roar")
         elif skin_id == "cat":
@@ -255,7 +255,7 @@ class BuddyEngine:
             self.character.trigger_ability("thunderclap", cx, cy, self.particles, self.audio)
             self.shake.trigger(14.0)
         elif skin_id == "ironman":
-            self.character.trigger_ability("unibeam", cx, cy, self.particles, self.audio)
+            self.character.trigger_ability("unibeam", self.cursor_x, self.cursor_y, self.particles, self.audio)
             self.particles.shockwave(cx, cy, max_radius=85.0, color=(0.2, 0.85, 1.0))
             self.shake.trigger(10.0)
             self.audio.play("laser")
@@ -264,10 +264,10 @@ class BuddyEngine:
                 self.particles.burst_sparks(cx, cy, count=3, color=(0.8, 0.8, 1.0))
             self.audio.play("magic")
         elif skin_id == "captain_america":
-            self.character.trigger_ability("shield_throw", cx, cy, self.particles, self.audio)
+            self.character.trigger_ability("shield_throw", self.cursor_x, self.cursor_y, self.particles, self.audio)
             self.audio.play("laser")
         elif skin_id == "thanos":
-            self.character.trigger_ability("the_snap", cx, cy, self.particles, self.audio)
+            self.character.trigger_ability("the_snap", self.cursor_x, self.cursor_y, self.particles, self.audio)
             self.shake.trigger(16.0)
         elif skin_id == "batman":
             self.character.trigger_ability("smoke_bomb", cx, cy, self.particles, self.audio)
@@ -476,13 +476,18 @@ class BuddyEngine:
                 dist_to_cursor = math.hypot(self.cursor_x - self.character.x, self.cursor_y - self.character.y)
                 self.is_chasing = (dist_to_cursor > 50.0)
 
-                # Handle spin animation
+                # Handle signature move active window & acrobatics
                 if self.is_spinning:
                     if now < self.spin_end_time:
-                        self.character.tilt += 0.35
+                        # Only acrobatic pet skins (e.g. cat) perform a smooth 360° somersault;
+                        # superhero and creature characters maintain their authentic upright poses and kinematics!
+                        if self.character.skin_id == "cat":
+                            t_rel = max(0.0, min(1.0, (self.spin_end_time - now) / 0.8))
+                            self.character.tilt = (1.0 - t_rel) * 2.0 * math.pi
                     else:
                         self.is_spinning = False
-                        self.character.tilt = 0.0
+                        if self.character.skin_id == "cat":
+                            self.character.tilt = 0.0
 
                 self.character.update(
                     dt,

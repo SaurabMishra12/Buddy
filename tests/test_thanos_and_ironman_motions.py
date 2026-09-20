@@ -138,6 +138,37 @@ class TestThanosAndIronmanMotions(unittest.TestCase):
             proj.on_tick()
         self.assertNotEqual(proj.x, 500.0)
 
+    def test_no_90_degree_tilt_on_double_click(self):
+        """Verify double-clicking on characters does not cause them to tilt 90 degrees (pi/2)."""
+        from core.engine import BuddyEngine
+        from core.config import ConfigManager
+
+        test_skins = ["ironman", "thanos", "thor", "captain_america", "hulk", "dragon"]
+        for s in test_skins:
+            cfg = ConfigManager(profile=f"test_tilt_{s}")
+            cfg.set("skin", s)
+            engine = BuddyEngine(config=cfg)
+            engine.character.x = 500.0
+            engine.character.y = 400.0
+            engine.cursor_x = 500.0
+            engine.cursor_y = 400.0
+
+            engine.trigger_signature_ability()
+            self.assertTrue(engine.is_spinning)
+
+            # Step simulation ticks during signature move
+            for _ in range(25):
+                engine.on_tick()
+                # Character must NEVER be stuck at or near 90 degrees (1.57 rad)
+                self.assertLess(
+                    abs(engine.character.tilt),
+                    0.60,
+                    f"Skin {s} tilted {engine.character.tilt} rad (~{math.degrees(engine.character.tilt):.1f}°), exceeding upright threshold!"
+                )
+
+            if hasattr(engine, "window") and engine.window and engine.window.window:
+                engine.window.window.destroy()
+
 
 if __name__ == "__main__":
     unittest.main()
