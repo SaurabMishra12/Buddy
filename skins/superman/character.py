@@ -33,11 +33,8 @@ class SupermanCharacter(BaseCharacter):
             self.is_firing_heat_vision = True
             self.heat_vision_end = time.time() + 0.75
             self.heat_target = (target_x, target_y)
-            dir_mult = 1.0 if self.facing_right else -1.0
-            beam_x = self.x + dir_mult * 55.0
-            beam_y = self.y - 14.0
-            particle_mgr.burst_sparks(beam_x, beam_y, count=18, color=(1.0, 0.25, 0.05), size=3.0)
-            particle_mgr.shockwave(beam_x, beam_y, max_radius=50.0, color=(1.0, 0.35, 0.1))
+            particle_mgr.burst_sparks(target_x, target_y, count=18, color=(1.0, 0.25, 0.05), size=3.0)
+            particle_mgr.shockwave(target_x, target_y, max_radius=50.0, color=(1.0, 0.35, 0.1))
             audio_mgr.play("laser")
             return True
         elif ability_name in ("supersonic_flight", "flight", "glide"):
@@ -140,46 +137,71 @@ class SupermanCharacter(BaseCharacter):
     def draw(self, ctx: cairo.Context, particle_mgr: ParticleManager) -> None:
         ctx.save()
 
-        # 1. Twin laser heat vision beams from eyes
+        # 1. Twin laser heat vision beams emerging precisely from eyes
         if self.is_firing_heat_vision:
             ctx.save()
             dir_mult = 1.0 if self.facing_right else -1.0
-            eye_x = self.x + dir_mult * 6.5
-            eye_y = self.y - 15.0 + self.hover_offset
+            cos_t = math.cos(self.tilt)
+            sin_t = math.sin(self.tilt)
 
-            dx = self.heat_target[0] - self.x
-            dy = self.heat_target[1] - self.y
-            dist = math.hypot(dx, dy) + 1e-4
-            beam_len = min(75.0, max(40.0, dist))
-            tx = eye_x + (dx / dist) * beam_len
-            ty = eye_y + (dy / dist) * beam_len
+            # In local space, eyes are located at front (4.5, -15.0) and rear (-2.5, -15.0)
+            local_eyes = [(4.5, -15.0), (-2.5, -15.0)]
+            tgt_x, tgt_y = self.heat_target
 
-            # Outer radiant crimson energy glow
-            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
-            ctx.set_line_width(9.0)
-            ctx.set_source_rgba(1.0, 0.1, 0.05, 0.55)
-            ctx.move_to(eye_x, eye_y)
-            ctx.line_to(tx, ty)
-            ctx.stroke()
+            for lx, ly in local_eyes:
+                sx = lx * dir_mult * self.scale
+                sy = ly * self.scale
+                eye_x = self.x + (sx * cos_t - sy * sin_t)
+                eye_y = self.y + self.hover_offset + (sx * sin_t + sy * cos_t)
 
-            # Mid laser core
-            ctx.set_line_width(4.5)
-            ctx.set_source_rgba(1.0, 0.45, 0.1, 0.85)
-            ctx.move_to(eye_x, eye_y)
-            ctx.line_to(tx, ty)
-            ctx.stroke()
+                dx = tgt_x - eye_x
+                dy = tgt_y - eye_y
+                dist = math.hypot(dx, dy) + 1e-4
+                beam_len = min(95.0, max(40.0, dist))
+                tx = eye_x + (dx / dist) * beam_len
+                ty = eye_y + (dy / dist) * beam_len
 
-            # White-hot laser beam center
-            ctx.set_line_width(2.0)
-            ctx.set_source_rgba(1.0, 0.98, 0.85, 0.98)
-            ctx.move_to(eye_x, eye_y)
-            ctx.line_to(tx, ty)
-            ctx.stroke()
+                # Wide radiant crimson energy aura
+                ctx.new_path()
+                ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+                ctx.set_line_width(6.0 * self.scale)
+                ctx.set_source_rgba(1.0, 0.15, 0.05, 0.45)
+                ctx.move_to(eye_x, eye_y)
+                ctx.line_to(tx, ty)
+                ctx.stroke()
 
-            # Target impact flare
-            ctx.set_source_rgba(1.0, 0.85, 0.2, 0.85)
-            ctx.arc(tx, ty, 6.0, 0, 2 * math.pi)
-            ctx.fill()
+                # Concentrated orange/amber plasma core
+                ctx.new_path()
+                ctx.set_line_width(3.2 * self.scale)
+                ctx.set_source_rgba(1.0, 0.55, 0.12, 0.85)
+                ctx.move_to(eye_x, eye_y)
+                ctx.line_to(tx, ty)
+                ctx.stroke()
+
+                # White-hot laser central core
+                ctx.new_path()
+                ctx.set_line_width(1.4 * self.scale)
+                ctx.set_source_rgba(1.0, 0.98, 0.88, 0.98)
+                ctx.move_to(eye_x, eye_y)
+                ctx.line_to(tx, ty)
+                ctx.stroke()
+
+                # Eye lens corona flare at emergence
+                ctx.new_path()
+                ctx.set_source_rgba(1.0, 0.35, 0.1, 0.8)
+                ctx.arc(eye_x, eye_y, 3.5 * self.scale, 0, 2 * math.pi)
+                ctx.fill()
+                ctx.new_path()
+                ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95)
+                ctx.arc(eye_x, eye_y, 1.2 * self.scale, 0, 2 * math.pi)
+                ctx.fill()
+
+                # Impact flare
+                ctx.new_path()
+                ctx.set_source_rgba(1.0, 0.85, 0.2, 0.85)
+                ctx.arc(tx, ty, 4.0 * self.scale, 0, 2 * math.pi)
+                ctx.fill()
+
             ctx.restore()
 
         # 2. Translate & Orient Superman
@@ -419,22 +441,26 @@ class SupermanCharacter(BaseCharacter):
 
         # Heroic Eyes (Blazing Crimson when firing Heat Vision, Royal Blue otherwise)
         if self.is_firing_heat_vision:
+            ctx.new_path()
             ctx.set_source_rgb(1.0, 0.15, 0.05)
-            ctx.arc(-2.5, -15, 2.5, 0, 2 * math.pi)
-            ctx.arc(4.5, -15, 2.5, 0, 2 * math.pi)
+            ctx.arc(-2.5, -15.0, 2.5, 0, 2 * math.pi)
+            ctx.arc(4.5, -15.0, 2.5, 0, 2 * math.pi)
             ctx.fill()
+            ctx.new_path()
             ctx.set_source_rgb(1.0, 0.9, 0.8)
-            ctx.arc(-2.5, -15, 1.0, 0, 2 * math.pi)
-            ctx.arc(4.5, -15, 1.0, 0, 2 * math.pi)
+            ctx.arc(-2.5, -15.0, 1.0, 0, 2 * math.pi)
+            ctx.arc(4.5, -15.0, 1.0, 0, 2 * math.pi)
             ctx.fill()
         else:
+            ctx.new_path()
             ctx.set_source_rgb(0.12, 0.45, 0.88)
-            ctx.arc(-2.5, -15, 1.6, 0, 2 * math.pi)
-            ctx.arc(4.5, -15, 1.6, 0, 2 * math.pi)
+            ctx.arc(-2.5, -15.0, 1.6, 0, 2 * math.pi)
+            ctx.arc(4.5, -15.0, 1.6, 0, 2 * math.pi)
             ctx.fill()
+            ctx.new_path()
             ctx.set_source_rgb(0.05, 0.05, 0.08)
-            ctx.arc(-2.3, -15, 0.8, 0, 2 * math.pi)
-            ctx.arc(4.7, -15, 0.8, 0, 2 * math.pi)
+            ctx.arc(-2.3, -15.0, 0.8, 0, 2 * math.pi)
+            ctx.arc(4.7, -15.0, 0.8, 0, 2 * math.pi)
             ctx.fill()
 
         ctx.restore()

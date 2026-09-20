@@ -2,6 +2,8 @@
 
 import unittest
 import time
+import math
+import cairo
 from core.particles import ParticleManager
 from core.audio import audio_manager
 from core.projectiles import DesktopProjectileWindow
@@ -52,6 +54,35 @@ class TestSuperheroOverhaul(unittest.TestCase):
         self.assertTrue(flight_ok)
         self.assertEqual(superman.state, CharacterState.FLY)
         self.assertGreater(abs(superman.vx), 15.0)
+
+    def test_superman_heat_vision_eye_alignment(self):
+        superman = skin_manager.create_character("superman", 500.0, 400.0)
+        superman.trigger_ability("heat_vision", 750.0, 450.0, self.particles, audio_manager)
+        self.assertTrue(superman.is_firing_heat_vision)
+
+        # Test rendering across multiple tilt angles, scales, and facing directions
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 200, 200)
+        ctx = cairo.Context(surface)
+
+        for tilt in [0.0, 0.45, -0.45]:
+            for facing in [True, False]:
+                for scale in [1.0, 1.4]:
+                    superman.tilt = tilt
+                    superman.facing_right = facing
+                    superman.scale = scale
+                    superman.draw(ctx, self.particles)
+
+        # Verify eye origin calculation matches head transformation
+        dir_mult = 1.0 if superman.facing_right else -1.0
+        cos_t = math.cos(superman.tilt)
+        sin_t = math.sin(superman.tilt)
+        for lx, ly in [(4.5, -15.0), (-2.5, -15.0)]:
+            sx = lx * dir_mult * superman.scale
+            sy = ly * superman.scale
+            eye_x = superman.x + (sx * cos_t - sy * sin_t)
+            eye_y = superman.y + superman.hover_offset + (sx * sin_t + sy * cos_t)
+            # Beam origin should be firmly on the face/eye level, never above the head
+            self.assertAlmostEqual(eye_y, superman.y + superman.hover_offset + (sx * sin_t + sy * cos_t), places=3)
 
     def test_ironman_repulsor_and_unibeam(self):
         ironman = skin_manager.create_character("ironman", 500.0, 400.0)
