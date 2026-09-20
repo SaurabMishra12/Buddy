@@ -4,7 +4,7 @@ import math
 import random
 import time
 import cairo
-from typing import Tuple, Dict, Any, List
+from typing import Tuple, Dict, Any, List, Optional
 from skins.base import BaseCharacter, CharacterState
 from core.particles import ParticleManager
 
@@ -23,7 +23,41 @@ class HulkCharacter(BaseCharacter):
         self.rage_aura = 0.0
         self.rage_boost_timer = 0.0
         self.ground_cracks: List[Tuple[float, float, float]] = []  # (offset_x, offset_y, alpha)
+        self.nav_target: Optional[Tuple[float, float]] = None
+        self.nav_timer = 0.0
         self.action_timer = time.time() + random.uniform(3.0, 6.0)
+
+    def launch_super_leap(
+        self,
+        target_x: float,
+        target_y: float,
+        particle_mgr: ParticleManager,
+        audio_mgr: Any
+    ) -> None:
+        """Launch a massive parabolic super leap towards the destination."""
+        dx = target_x - self.x
+        dist_x = abs(dx)
+        dir_x = 1.0 if dx >= 0 else -1.0
+        self.facing_right = (dir_x > 0)
+        # Parabolic ballistic physics: height scales with distance
+        self.vy = min(-16.0, max(-28.0, -18.0 - dist_x * 0.035))
+        time_air = (2.0 * abs(self.vy)) / 0.95
+        self.vx = dx / max(8.0, time_air)
+        self.vx = max(-22.0, min(22.0, self.vx))
+        self.state = CharacterState.JUMP
+        self.is_airborne = True
+        particle_mgr.shockwave(self.x, self.y + 24, max_radius=60.0, color=(0.3, 0.9, 0.2), line_width=4.0)
+        particle_mgr.smoke_puff(self.x, self.y + 24, count=8, color=(0.45, 0.40, 0.35))
+        audio_mgr.play("roar")
+
+    def nav_to(self, target_x: float, target_y: float) -> None:
+        """Command Hulk to traverse to point via massive parabolic super leaps."""
+        self.nav_target = (target_x, target_y)
+        self.is_smashing = False
+        self.is_thunderclapping = False
+        self.nav_timer = time.time()
+        self.facing_right = (target_x >= self.x)
+        # Trajectory launched on next update frame
 
     def trigger_ability(
         self,
@@ -78,14 +112,7 @@ class HulkCharacter(BaseCharacter):
             return True
 
         elif ability_name in ("super_jump", "jump"):
-            # 4. Parabolic Super Leap: Massive launch across distance
-            dx = target_x - self.x
-            self.vx = max(-18.0, min(18.0, dx * 0.10))
-            self.vy = -20.0  # Massive upward thrust
-            self.state = CharacterState.JUMP
-            particle_mgr.smoke_puff(self.x, self.y + 24, count=6, color=(0.45, 0.40, 0.35))
-            particle_mgr.shockwave(self.x, self.y + 24, max_radius=40.0, color=(0.3, 0.85, 0.2))
-            audio_mgr.play("smash")
+            self.launch_super_leap(target_x, target_y, particle_mgr, audio_mgr)
             return True
 
         return False
@@ -149,18 +176,47 @@ class HulkCharacter(BaseCharacter):
         else:
             self.y = ground_y
             if self.vy > 6.0:  # Hard landing impact!
-                particle_mgr.shockwave(self.x, self.y + 24, max_radius=50.0, color=(0.35, 0.85, 0.2))
-                particle_mgr.smoke_puff(self.x, self.y + 24, count=5)
-                particle_mgr.burst_sparks(self.x, self.y + 24, count=10, color=(0.4, 0.9, 0.2))
+                self.ground_cracks.clear()
+                for _ in range(6):
+                    ang = random.uniform(-0.8, 0.8)
+                    length = random.uniform(12.0, 35.0)
+                    self.ground_cracks.append((math.sin(ang) * length, math.cos(ang) * (length * 0.4), 1.0))
+                particle_mgr.shockwave(self.x, self.y + 24, max_radius=55.0, color=(0.35, 0.85, 0.2), line_width=3.5)
+                particle_mgr.smoke_puff(self.x, self.y + 24, count=6)
+                particle_mgr.burst_sparks(self.x, self.y + 24, count=12, color=(0.4, 0.9, 0.2))
                 audio_mgr.play("smash")
             self.vy = 0.0
             self.is_airborne = False
 
-        # Traversal: If target is far (>120px) and on ground, Hulk initiates a Parabolic Super Leap!
-        dx = cursor_x - self.x
-        dist_x = abs(dx)
+        # 1. AUTONOMOUS BALLISTIC PARABOLIC SUPER LEAP NAVIGATION
+        if self.nav_target is not None:
+            tx, ty = self.nav_target
+            dx = tx - self.x
+            dist_x = abs(dx)
+            self.facing_right = (dx >= 0.0)
 
-        if not self.is_smashing and not self.is_thunderclapping:
+            if not self.is_airborne and self.y >= ground_y - 4.0:
+                if dist_x < 35.0:
+                    # Reached target destination!
+                    self.nav_target = None
+                    self.state = CharacterState.IDLE
+                    self.vx = 0.0
+                    self.vy = 0.0
+                    particle_mgr.shockwave(self.x, self.y + 24, max_radius=60.0, color=(0.25, 0.88, 0.25), line_width=4.5)
+                    particle_mgr.smoke_puff(self.x, self.y + 24, count=6)
+                    audio_mgr.play("smash")
+                else:
+                    # Launch massive parabolic super leap directly to target!
+                    self.launch_super_leap(tx, ty, particle_mgr, audio_mgr)
+            else:
+                # Mid-air ballistic drift towards target
+                target_drift = (1.0 if dx > 0 else -1.0) * min(20.0, max(4.0, dist_x * 0.12))
+                self.vx += (target_drift - self.vx) * 0.08
+
+        # 2. STANDARD GROUND WANDER (When not navigating)
+        elif not self.is_smashing and not self.is_thunderclapping:
+            dx = cursor_x - self.x
+            dist_x = abs(dx)
             if not self.is_airborne:
                 if dist_x > 140.0 and random.random() < 0.08:
                     # Launch parabolic super leap towards target!

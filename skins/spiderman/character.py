@@ -14,6 +14,7 @@ from skins.base import BaseCharacter, CharacterState
 from core.particles import ParticleManager
 from core.projectiles import DesktopProjectileWindow
 from core.window import WebRopeWindow
+from core.platforms import platform_manager
 
 
 class SpiderManCharacter(BaseCharacter):
@@ -45,8 +46,15 @@ class SpiderManCharacter(BaseCharacter):
         self.is_hanging_upside_down = False
         self.hang_end_time = 0.0
         self.is_perched = False
+        self.is_seated = False
         self.is_wall_crawling = False
         self.action_timer = time.time() + random.uniform(3.0, 7.0)
+
+        # Autonomous multi-stage navigation (run -> swing -> jump -> land/seat/perch)
+        self.nav_target: Optional[Tuple[float, float]] = None
+        self.nav_stage = "IDLE"  # "RUN", "SWING", "JUMP", "LAND"
+        self.nav_timer = 0.0
+        self.current_ledge = None
 
         # Cursor velocity tracking for reflex-based spider sense
         self.prev_cursor_x = x
@@ -65,6 +73,8 @@ class SpiderManCharacter(BaseCharacter):
         if self.rope_window is None:
             try:
                 def get_hand_pos():
+                    if not (self.is_swinging or self.is_hanging_upside_down):
+                        return (self.x, self.y)
                     if self.is_hanging_upside_down:
                         return (self.x, self.y + 15.0)
                     else:
@@ -72,17 +82,28 @@ class SpiderManCharacter(BaseCharacter):
                         return (self.x + dir_mult * 8.0, self.y - 16.0)
 
                 def get_anchor_pos():
+                    if not (self.is_swinging or self.is_hanging_upside_down):
+                        return (self.anchor_x, self.anchor_y)
                     return (self.anchor_x, self.anchor_y)
+
+                def get_rope_alpha():
+                    if self.is_swinging or self.is_hanging_upside_down:
+                        return 1.0
+                    return 0.0
 
                 self.rope_window = WebRopeWindow(
                     start_getter=get_hand_pos,
                     end_getter=get_anchor_pos,
-                    rope_style="swing"
+                    rope_style="swing",
+                    alpha_getter=get_rope_alpha
                 )
             except Exception:
                 self.rope_window = None
 
     def _destroy_swing_rope(self) -> None:
+        self.cleanup_rope()
+
+    def cleanup_rope(self) -> None:
         if self.rope_window is not None:
             try:
                 self.rope_window.destroy_rope()
@@ -91,7 +112,7 @@ class SpiderManCharacter(BaseCharacter):
             self.rope_window = None
 
     def __del__(self) -> None:
-        self._destroy_swing_rope()
+        self.cleanup_rope()
 
     def trigger_ability(
         self,
@@ -176,6 +197,7 @@ class SpiderManCharacter(BaseCharacter):
             self._destroy_swing_rope()
             self.is_swinging = False
             self.is_hanging_upside_down = False
+            self.is_seated = False
             self.is_perched = True
             self.state = CharacterState.IDLE
             self.vx = 0.0
@@ -184,10 +206,25 @@ class SpiderManCharacter(BaseCharacter):
             particle_mgr.smoke_puff(self.x, self.y + 20, count=3)
             return True
 
+        elif ability_name in ("seat", "sit"):
+            self._destroy_swing_rope()
+            self.is_swinging = False
+            self.is_hanging_upside_down = False
+            self.is_perched = False
+            self.is_seated = True
+            self.state = CharacterState.IDLE
+            self.vx = 0.0
+            self.vy = 0.0
+            self.eye_squint = 0.0
+            particle_mgr.smoke_puff(self.x, self.y + 20, count=2)
+            return True
+
         elif ability_name in ("wall_crawl", "crawl"):
             self._destroy_swing_rope()
             self.is_swinging = False
             self.is_hanging_upside_down = False
+            self.is_perched = False
+            self.is_seated = False
             self.is_wall_crawling = True
             self.state = CharacterState.IDLE
             particle_mgr.burst_sparks(self.x, self.y, count=4, color=(0.9, 0.95, 1.0), size=2.0)
@@ -196,6 +233,7 @@ class SpiderManCharacter(BaseCharacter):
         elif ability_name in ("upside_down_hang", "hang"):
             self.is_swinging = False
             self.is_perched = False
+            self.is_seated = False
             self.is_wall_crawling = False
             self.is_hanging_upside_down = True
             self.tilt = math.pi
@@ -209,6 +247,15 @@ class SpiderManCharacter(BaseCharacter):
             return True
 
         return False
+
+    def nav_to(self, target_x: float, target_y: float) -> None:
+        """Initiate multi-stage superhero movement (run -> swing -> jump -> land/seat/perch)."""
+        self.nav_target = (target_x, target_y)
+        self.nav_stage = "RUN"
+        self.nav_timer = time.time()
+        self.is_perched = False
+        self.is_seated = False
+        self.is_hanging_upside_down = False
 
     def update(
         self,
@@ -291,6 +338,25 @@ class SpiderManCharacter(BaseCharacter):
             self.tilt += (target_tilt - self.tilt) * 0.25
             self.facing_right = (self.swing_vel >= 0.0)
 
+            # Navigation swing transition into acrobatic jump & somersault
+            if self.nav_target is not None and self.nav_stage == "SWING":
+                tx, ty = self.nav_target
+                dx = tx - self.x
+                dy = ty - self.y
+                dist = math.hypot(dx, dy)
+                elapsed = now - self.nav_timer
+                if elapsed > 0.65 or dist < 140.0:
+                    self.is_swinging = False
+                    self._destroy_swing_rope()
+                    self.nav_stage = "JUMP"
+                    self.nav_timer = now
+                    self.state = CharacterState.JUMP
+                    self.vx = (dx / max(1.0, dist)) * 16.5 * speed_mult
+                    self.vy = min(-9.0, max(-20.0, dy * 0.14))
+                    audio_mgr.play("swoosh")
+                    particle_mgr.burst_sparks(self.x, self.y, count=5, color=(0.95, 0.98, 1.0))
+                    return
+
             # Web release at apex or near ground
             if (abs(self.swing_vel) < 0.4 and abs(self.swing_angle) > 0.45) or self.y >= ground_y - 10.0:
                 # Release web line and transition to graceful aerial leap
@@ -298,6 +364,9 @@ class SpiderManCharacter(BaseCharacter):
                 self._destroy_swing_rope()
                 self.vx = self.swing_vel * 35.0
                 self.vy = -abs(self.swing_vel) * 20.0
+                if self.nav_stage == "SWING":
+                    self.nav_stage = "JUMP"
+                    self.state = CharacterState.JUMP
                 audio_mgr.play("swoosh")
                 particle_mgr.burst_sparks(self.x, self.y, count=4, color=(0.92, 0.96, 1.0), size=2.2)
 
@@ -321,51 +390,186 @@ class SpiderManCharacter(BaseCharacter):
         else:
             self.is_wall_crawling = False
 
-        # GROUND & AIR NAVIGATION
-        dx = cursor_x - self.x
-        dy = cursor_y - self.y
-        dist = math.hypot(dx, dy)
-        dist_x = abs(dx)
+        # 1. MULTI-STAGE AUTONOMOUS NAVIGATION (Run -> Swing -> Jump -> Land/Seat/Perch)
+        if self.nav_target is not None:
+            tx, ty = self.nav_target
+            dx = tx - self.x
+            dy = ty - self.y
+            dist = math.hypot(dx, dy)
+            self.facing_right = (dx >= 0.0)
 
-        if dist_x > 6.0:
-            self.facing_right = (cursor_x >= self.x)
-
-        if self.y >= ground_y - 3.0 and abs(self.vy) < 2.0:
-            # On ground
-            self.y = ground_y
-            self.vy = 0.0
-            self.tilt += (0.0 - self.tilt) * 0.2
-
-            if self.is_perched:
+            if dist < 24.0:
+                # Arrived at destination!
+                self.nav_target = None
+                self.nav_stage = "IDLE"
+                self.vx = 0.0
+                self.vy = 0.0
+                # Check if arrived on a window ledge or button
+                ledge = platform_manager.is_on_ledge(self.x, self.y, tolerance=24.0) or platform_manager.get_nearest_ledge(self.x, self.y, max_dist=45.0)
+                if ledge:
+                    self.y = ledge.top
+                    if ledge.ledge_type == "button":
+                        self.is_perched = True
+                        self.is_seated = False
+                    else:
+                        if random.random() < 0.6:
+                            self.is_seated = True
+                            self.is_perched = False
+                        else:
+                            self.is_perched = True
+                            self.is_seated = False
+                else:
+                    self.is_perched = True
+                    self.is_seated = False
                 self.state = CharacterState.IDLE
-                self.vx *= 0.75
-            elif dist_x > 25.0:
-                # Acrobatic low-profile running sprint
-                self.state = CharacterState.RUN
-                self.stride += 0.22 * speed_mult
-                target_vx = (1.0 if dx > 0 else -1.0) * min(11.0, dist_x * 0.09) * speed_mult
-                self.vx += (target_vx - self.vx) * 0.22
-                self.x += self.vx
-                if random.random() < 0.2:
-                    particle_mgr.smoke_puff(self.x, ground_y + 18, count=1)
+                particle_mgr.smoke_puff(self.x, self.y + 16, count=2)
+                return
             else:
-                self.state = CharacterState.IDLE
-                self.vx *= 0.80
-                self.x += self.vx
-        else:
-            # Airborne gravity and velocity damping
-            self.state = CharacterState.FLY if abs(self.vx) > 3.0 else CharacterState.HOVER
-            self.vy += 0.85  # Normal gravity
-            self.vx *= 0.96
-            self.x += self.vx
-            self.y += self.vy
-            target_tilt = (self.vx / 12.0) * 0.25
-            self.tilt += (target_tilt - self.tilt) * 0.15
+                elapsed = time.time() - self.nav_timer
+                if dist > 180.0:
+                    if self.nav_stage == "RUN":
+                        # Stage 1: Sprint towards launch point
+                        self.state = CharacterState.RUN
+                        self.stride += 0.28 * speed_mult
+                        dir_sign = 1.0 if dx > 0 else -1.0
+                        self.vx = dir_sign * 13.5 * speed_mult
+                        self.x += self.vx
+                        if elapsed > 0.32:
+                            # Stage 2: Fire web and launch high pendulum swing!
+                            self.nav_stage = "SWING"
+                            self.nav_timer = time.time()
+                            self.anchor_x = (self.x + tx) / 2.0
+                            self.anchor_y = max(30.0, min(self.y - 150.0, ty - 180.0))
+                            self.web_length = math.hypot(self.x - self.anchor_x, self.y - self.anchor_y)
+                            self.swing_angle = math.atan2(self.x - self.anchor_x, self.y - self.anchor_y)
+                            self.swing_vel = 1.8 if dx > 0 else -1.8
+                            self.is_swinging = True
+                            self.state = CharacterState.FLY
+                            self._ensure_swing_rope()
+                            audio_mgr.play("thwip")
+                            particle_mgr.burst_sparks(self.x, self.y - 12, count=6, color=(0.95, 0.98, 1.0))
+                    elif self.nav_stage == "SWING":
+                        # Stage 2 is driven by PENDULUM WEB-SWINGING DYNAMICS below.
+                        # Transition to Stage 3 (Acrobatic Jump & Tuck) at apex or when near target
+                        if elapsed > 0.65 or dist < 130.0:
+                            self.is_swinging = False
+                            self._destroy_swing_rope()
+                            self.nav_stage = "JUMP"
+                            self.nav_timer = time.time()
+                            self.state = CharacterState.JUMP
+                            self.vx = (dx / dist) * 16.5 * speed_mult
+                            self.vy = min(-9.0, max(-20.0, dy * 0.14))
+                            audio_mgr.play("swoosh")
+                            particle_mgr.burst_sparks(self.x, self.y, count=5, color=(0.95, 0.98, 1.0))
+                    elif self.nav_stage == "JUMP":
+                        # Stage 3: Somersault jump through the air
+                        self.state = CharacterState.JUMP
+                        self.tilt += 0.32 * (1.0 if self.vx > 0 else -1.0)
+                        self.x += self.vx
+                        self.y += self.vy
+                        self.vy += 0.72  # Air gravity
+                else:
+                    # Short-range: sprint and rapid web-zip leap directly to target
+                    self.state = CharacterState.RUN
+                    self.stride += 0.26 * speed_mult
+                    follow_spd = min(15.0, max(4.5, dist * 0.14))
+                    self.vx = (dx / dist) * follow_spd
+                    self.vy = (dy / dist) * follow_spd
+                    self.x += self.vx
+                    self.y += self.vy
 
-            if self.y >= ground_y:
+        # 2. WINDOW LEDGE & BUTTON INTERACTION
+        current_ledge = platform_manager.is_on_ledge(self.x, self.y, tolerance=14.0)
+        if current_ledge and self.nav_target is None and not self.is_swinging and not self.is_hanging_upside_down:
+            self.current_ledge = current_ledge
+            self.y = current_ledge.top
+            self.vy = 0.0
+
+            if abs(self.vx) < 1.0:
+                # Sitting or perching on window frame / buttons
+                if not self.is_perched and not self.is_seated:
+                    if current_ledge.ledge_type == "button":
+                        self.is_perched = True
+                        self.is_seated = False
+                    else:
+                        if random.random() < 0.6:
+                            self.is_seated = True
+                            self.is_perched = False
+                        else:
+                            self.is_perched = True
+                            self.is_seated = False
+            else:
+                # Running horizontally along the window ledge or button surface
+                self.is_perched = False
+                self.is_seated = False
+        else:
+            self.current_ledge = None
+
+        # 3. GROUND & AIR NAVIGATION (Standard Autonomous Wander)
+        if self.nav_target is None and not self.is_swinging and not self.is_hanging_upside_down:
+            dx = cursor_x - self.x
+            dy = cursor_y - self.y
+            dist = math.hypot(dx, dy)
+            dist_x = abs(dx)
+
+            if dist_x > 6.0:
+                self.facing_right = (cursor_x >= self.x)
+
+            if self.current_ledge:
+                # On window ledge or button platform
+                self.y = self.current_ledge.top
+                self.vy = 0.0
+                if self.is_perched or self.is_seated:
+                    self.state = CharacterState.IDLE
+                    self.vx *= 0.75
+                elif dist_x > 25.0:
+                    # Run along window frame
+                    self.state = CharacterState.RUN
+                    self.stride += 0.22 * speed_mult
+                    target_vx = (1.0 if dx > 0 else -1.0) * min(10.0, dist_x * 0.08) * speed_mult
+                    self.vx += (target_vx - self.vx) * 0.22
+                    self.x += self.vx
+                    # Don't walk off ledge without intention
+                    self.x = max(self.current_ledge.left + 15.0, min(self.current_ledge.right - 15.0, self.x))
+                else:
+                    self.state = CharacterState.IDLE
+                    self.vx *= 0.80
+            elif self.y >= ground_y - 3.0 and abs(self.vy) < 2.0:
+                # On ground
                 self.y = ground_y
                 self.vy = 0.0
-                particle_mgr.smoke_puff(self.x, ground_y + 18, count=3)
+                self.tilt += (0.0 - self.tilt) * 0.2
+
+                if self.is_perched or self.is_seated:
+                    self.state = CharacterState.IDLE
+                    self.vx *= 0.75
+                elif dist_x > 25.0:
+                    # Acrobatic low-profile running sprint
+                    self.state = CharacterState.RUN
+                    self.stride += 0.22 * speed_mult
+                    target_vx = (1.0 if dx > 0 else -1.0) * min(11.0, dist_x * 0.09) * speed_mult
+                    self.vx += (target_vx - self.vx) * 0.22
+                    self.x += self.vx
+                    if random.random() < 0.2:
+                        particle_mgr.smoke_puff(self.x, ground_y + 18, count=1)
+                else:
+                    self.state = CharacterState.IDLE
+                    self.vx *= 0.80
+                    self.x += self.vx
+            else:
+                # Airborne gravity and velocity damping
+                self.state = CharacterState.FLY if abs(self.vx) > 3.0 else CharacterState.HOVER
+                self.vy += 0.85  # Normal gravity
+                self.vx *= 0.96
+                self.x += self.vx
+                self.y += self.vy
+                target_tilt = (self.vx / 12.0) * 0.25
+                self.tilt += (target_tilt - self.tilt) * 0.15
+
+                if self.y >= ground_y:
+                    self.y = ground_y
+                    self.vy = 0.0
+                    particle_mgr.smoke_puff(self.x, ground_y + 18, count=3)
 
         # Screen boundaries clamping
         self.x = max(min_x + 45.0, min(min_x + screen_w - 45.0, self.x))
@@ -470,7 +674,44 @@ class SpiderManCharacter(BaseCharacter):
         # 2. LEGS & RED BOOTS (3/4 Dynamic Athletic Runner Cycle)
         # -------------------------------------------------------------
         ctx.save()
-        if self.is_perched:
+        if self.is_seated:
+            # Iconic Rooftop/Window Seated Posture:
+            # Legs bend 90 degrees at window edge with boots dangling and swinging
+            swing1 = math.sin(self.anim_time * 2.8) * 3.5
+            swing2 = math.cos(self.anim_time * 2.8) * 3.0
+
+            # Far Leg: thigh forward, calf dangling down over edge
+            ctx.set_source_rgb(*SPIDER_BLUE_DARK)
+            ctx.set_line_width(7.5)
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            ctx.move_to(-2, 8)
+            ctx.line_to(8, 8)
+            ctx.line_to(9 + swing1, 23)
+            ctx.stroke()
+            # Far Boot
+            ctx.set_source_rgb(*SPIDER_RED_DARK)
+            ctx.set_line_width(6.5)
+            ctx.move_to(8.5 + swing1 * 0.7, 16)
+            ctx.line_to(9.5 + swing1, 25)
+            ctx.line_to(13.5 + swing1, 25)
+            ctx.stroke()
+
+            # Near Leg: thigh forward, calf dangling down over edge
+            ctx.set_source_rgb(*SPIDER_BLUE)
+            ctx.set_line_width(8.0)
+            ctx.move_to(3, 8)
+            ctx.line_to(13, 8)
+            ctx.line_to(14 + swing2, 24)
+            ctx.stroke()
+            # Near Boot
+            ctx.set_source_rgb(*SPIDER_RED)
+            ctx.set_line_width(7.0)
+            ctx.move_to(13.5 + swing2 * 0.7, 17)
+            ctx.line_to(14.5 + swing2, 26)
+            ctx.line_to(18.5 + swing2, 26)
+            ctx.stroke()
+
+        elif self.is_perched:
             # Low three-point crouching posture
             ctx.set_source_rgb(*SPIDER_BLUE_DARK)
             ctx.set_line_width(8.0)
@@ -736,6 +977,33 @@ class SpiderManCharacter(BaseCharacter):
             ctx.set_source_rgb(*SPIDER_RED_DARK)
             ctx.move_to(-20, -2)
             ctx.line_to(-26, 6)
+            ctx.stroke()
+
+        if self.is_seated:
+            # Casual seated arms: hands planted on the window sill beside hips for support
+            ctx.set_source_rgb(*SPIDER_BLUE_DARK)
+            ctx.set_line_width(6.5)
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            # Far arm supporting behind hip
+            ctx.move_to(-7, -5)
+            ctx.line_to(-14, 2)
+            ctx.line_to(-12, 10)
+            ctx.stroke()
+            ctx.set_source_rgb(*SPIDER_RED_DARK)
+            ctx.move_to(-13, 6)
+            ctx.line_to(-12, 11)
+            ctx.stroke()
+
+            # Near arm resting beside hip
+            ctx.set_source_rgb(*SPIDER_BLUE)
+            ctx.set_line_width(7.0)
+            ctx.move_to(6, -5)
+            ctx.line_to(12, 1)
+            ctx.line_to(10, 10)
+            ctx.stroke()
+            ctx.set_source_rgb(*SPIDER_RED)
+            ctx.move_to(11, 5)
+            ctx.line_to(10, 11)
             ctx.stroke()
 
         elif self.is_perched:

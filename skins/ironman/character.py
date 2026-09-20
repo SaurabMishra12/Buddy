@@ -4,7 +4,7 @@ import math
 import random
 import time
 import cairo
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, Optional
 from skins.base import BaseCharacter, CharacterState
 from core.particles import ParticleManager, CYAN_GLOW, FIRE_YELLOW, FIRE_ORANGE
 from core.projectiles import DesktopProjectileWindow
@@ -22,6 +22,7 @@ class IronManCharacter(BaseCharacter):
         self.is_firing_unibeam = False
         self.unibeam_end = 0.0
         self.stride = 0.0
+        self.nav_target: Optional[Tuple[float, float]] = None
         self.action_timer = time.time() + random.uniform(3.0, 6.0)
 
     def trigger_ability(
@@ -102,6 +103,11 @@ class IronManCharacter(BaseCharacter):
             return True
         return False
 
+    def nav_to(self, target_x: float, target_y: float) -> None:
+        """Rocket thruster flight towards destination."""
+        self.nav_target = (target_x, target_y)
+        self.state = CharacterState.FLY
+
     def update(
         self,
         dt: float,
@@ -118,7 +124,8 @@ class IronManCharacter(BaseCharacter):
         activity = config_data.get("activity_level", 1.0)
 
         # Facing direction
-        self.facing_right = (cursor_x >= self.x)
+        if self.nav_target is None:
+            self.facing_right = (cursor_x >= self.x)
 
         if self.is_firing_repulsor and now >= self.repulsor_end:
             self.is_firing_repulsor = False
@@ -130,7 +137,7 @@ class IronManCharacter(BaseCharacter):
             self.arc_pulse = max(0.0, self.arc_pulse - 0.05)
 
         # Random personality events
-        if now >= self.action_timer and activity > 0.1:
+        if now >= self.action_timer and activity > 0.1 and self.nav_target is None:
             self.action_timer = now + random.uniform(4.0, 8.0) / max(0.2, activity)
             roll = random.random()
             if roll < 0.40:
@@ -145,20 +152,36 @@ class IronManCharacter(BaseCharacter):
         max_spd = 17.0 * speed_mult
         accel = 0.75 * speed_mult
 
-        # True vector to cursor without artificial offset
-        dx = cursor_x - self.x
-        dy = cursor_y - self.y
-        dist = math.hypot(dx, dy)
+        if self.nav_target is not None:
+            tx, ty = self.nav_target
+            dx = tx - self.x
+            dy = ty - self.y
+            dist = math.hypot(dx, dy)
+            self.facing_right = (dx >= 0.0)
 
-        if dist > 50.0:
-            self.vx += (dx / dist) * min(dist * 0.08, accel)
-            self.vy += (dy / dist) * min(dist * 0.08, accel)
-            self.state = CharacterState.FLY
+            if dist > 20.0:
+                self.vx += (dx / dist) * min(dist * 0.10, accel * 1.5)
+                self.vy += (dy / dist) * min(dist * 0.10, accel * 1.5)
+                self.state = CharacterState.FLY
+            else:
+                self.nav_target = None
+                self.state = CharacterState.HOVER
+                self.vx *= 0.70
+                self.vy *= 0.70
         else:
-            # Peaceful touch/petting deadzone
-            self.state = CharacterState.HOVER
-            self.vx *= 0.70
-            self.vy *= 0.70
+            dx = cursor_x - self.x
+            dy = cursor_y - self.y
+            dist = math.hypot(dx, dy)
+
+            if dist > 50.0:
+                self.vx += (dx / dist) * min(dist * 0.08, accel)
+                self.vy += (dy / dist) * min(dist * 0.08, accel)
+                self.state = CharacterState.FLY
+            else:
+                # Peaceful touch/petting deadzone
+                self.state = CharacterState.HOVER
+                self.vx *= 0.70
+                self.vy *= 0.70
 
         self.vx *= 0.90
         self.vy *= 0.90

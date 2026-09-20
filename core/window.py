@@ -296,6 +296,14 @@ class WebRopeWindow(Gtk.Window):
             gdk_win.set_override_redirect(True)
             # 100% input transparency (never intercepts mouse events)
             gdk_win.input_shape_combine_region(cairo.Region(), 0, 0)
+            try:
+                gdk_win.set_background_rgba(Gdk.RGBA(0.0, 0.0, 0.0, 0.0))
+            except Exception:
+                pass
+            try:
+                gdk_win.set_background_pattern(None)
+            except Exception:
+                pass
 
         self.move(self.origin_x, self.origin_y)
 
@@ -444,6 +452,64 @@ class WebRopeWindow(Gtk.Window):
                 ctx.line_to(p2x - nx * wave, p2y - ny * wave)
                 ctx.stroke()
 
+        elif self.rope_style == "grapple":
+            # "grapple": TACTICAL HIGH-TENSILE CARBON STEEL CABLE (Grapple gun to anchor)
+            # 1. Anchor Head / Bat-Claw at anchor point (lx2, ly2)
+            ctx.save()
+            ctx.translate(lx2, ly2)
+            ang = math.atan2(ly2 - ly1, lx2 - lx1)
+            ctx.rotate(ang)
+
+            # Three-pronged tactical grapple hook
+            ctx.set_source_rgba(0.25, 0.28, 0.35, 0.95 * alpha)
+            ctx.set_line_width(2.2)
+            # Central anchor point
+            ctx.arc(0, 0, 3.2, 0, 2 * math.pi)
+            ctx.fill()
+            # Flared grapple claws gripping surface
+            for prong_angle in [-0.85, 0.0, 0.85]:
+                ctx.move_to(0, 0)
+                ctx.line_to(-math.cos(prong_angle) * 9.0, math.sin(prong_angle) * 9.0)
+                ctx.stroke()
+            ctx.restore()
+
+            # 2. Braided Carbon Steel Cable
+            # Outer dark sheath
+            ctx.set_source_rgba(0.12, 0.14, 0.18, 0.95 * alpha)
+            ctx.set_line_width(2.6)
+            ctx.move_to(lx1, ly1)
+            ctx.line_to(lx2, ly2)
+            ctx.stroke()
+
+            # Inner metallic tensile highlight
+            ctx.set_source_rgba(0.75, 0.82, 0.92, 0.85 * alpha)
+            ctx.set_line_width(1.0)
+            ctx.move_to(lx1, ly1)
+            ctx.line_to(lx2, ly2)
+            ctx.stroke()
+
+            # High-tension micro-vibration shimmer
+            ctx.set_source_rgba(0.9, 0.95, 1.0, 0.40 * alpha)
+            ctx.set_line_width(0.8)
+            seg_len = 18.0
+            steps = max(3, int(dist / seg_len))
+            for s in range(steps):
+                t1 = s / steps
+                t2 = (s + 1) / steps
+                p1x = lx1 + dx * t1
+                p1y = ly1 + dy * t1
+                p2x = lx1 + dx * t2
+                p2y = ly1 + dy * t2
+                vibe = math.sin(s * 2.0 + self.anim_time * 25.0) * 1.2
+                ctx.move_to(p1x + nx * vibe, p1y + ny * vibe)
+                ctx.line_to(p2x - nx * vibe, p2y - ny * vibe)
+                ctx.stroke()
+
+            # Grapple gun muzzle attachment ring
+            ctx.set_source_rgba(0.3, 0.35, 0.45, 0.95 * alpha)
+            ctx.arc(lx1, ly1, 2.5, 0, 2 * math.pi)
+            ctx.fill()
+
         else:
             # "throw": HIGH-VELOCITY BRAIDED SILK STREAM (Wrist to Projectile/Target)
             # Layer A: Outer high-velocity silk glow aura
@@ -559,6 +625,14 @@ class OverlayWindow:
 
         # override_redirect allows free travel anywhere on screen without WM borders
         self.gdk_window.set_override_redirect(True)
+        try:
+            self.gdk_window.set_background_rgba(Gdk.RGBA(0.0, 0.0, 0.0, 0.0))
+        except Exception:
+            pass
+        try:
+            self.gdk_window.set_background_pattern(None)
+        except Exception:
+            pass
         self.gdk_window.set_events(
             self.gdk_window.get_events()
             | Gdk.EventMask.BUTTON_PRESS_MASK

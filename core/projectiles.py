@@ -48,15 +48,34 @@ class DesktopProjectileWindow(Gtk.Window):
         self.set_resizable(False)
 
         screen = Gdk.Screen.get_default()
-        visual = screen.get_rgba_visual()
-        if visual is not None:
-            self.set_visual(visual)
+        if screen is not None:
+            visual = screen.get_rgba_visual()
+            if visual is not None:
+                self.set_visual(visual)
+
+            css_provider = Gtk.CssProvider()
+            css_provider.load_from_data(b"window { background-color: transparent; }")
+            Gtk.StyleContext.add_provider_for_screen(
+                screen, css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+            self.get_style_context().add_provider(
+                css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
 
         self.realize()
         gdk_win = self.get_window()
-        gdk_win.set_override_redirect(True)
-        # 100% click-through
-        gdk_win.input_shape_combine_region(cairo.Region(), 0, 0)
+        if gdk_win:
+            gdk_win.set_override_redirect(True)
+            # 100% click-through
+            gdk_win.input_shape_combine_region(cairo.Region(), 0, 0)
+            try:
+                gdk_win.set_background_rgba(Gdk.RGBA(0.0, 0.0, 0.0, 0.0))
+            except Exception:
+                pass
+            try:
+                gdk_win.set_background_pattern(None)
+            except Exception:
+                pass
 
         # Monitor screen dimensions
         display = Gdk.Display.get_default()

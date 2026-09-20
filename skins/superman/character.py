@@ -4,7 +4,7 @@ import math
 import random
 import time
 import cairo
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, Optional
 from skins.base import BaseCharacter, CharacterState
 from core.particles import ParticleManager, CYAN_GLOW
 
@@ -18,6 +18,7 @@ class SupermanCharacter(BaseCharacter):
         self.is_firing_heat_vision = False
         self.heat_vision_end = 0.0
         self.heat_target = (0.0, 0.0)
+        self.nav_target: Optional[Tuple[float, float]] = None
         self.action_timer = time.time() + random.uniform(3.0, 6.0)
         self.hover_offset = 0.0
 
@@ -53,6 +54,11 @@ class SupermanCharacter(BaseCharacter):
             return True
         return False
 
+    def nav_to(self, target_x: float, target_y: float) -> None:
+        """Supersonic flight towards destination."""
+        self.nav_target = (target_x, target_y)
+        self.state = CharacterState.FLY
+
     def update(
         self,
         dt: float,
@@ -69,13 +75,14 @@ class SupermanCharacter(BaseCharacter):
         activity = config_data.get("activity_level", 1.0)
 
         # Facing direction
-        self.facing_right = (cursor_x >= self.x)
+        if self.nav_target is None:
+            self.facing_right = (cursor_x >= self.x)
 
         if self.is_firing_heat_vision and now >= self.heat_vision_end:
             self.is_firing_heat_vision = False
 
         # Periodic heroic actions
-        if now >= self.action_timer and activity > 0.1:
+        if now >= self.action_timer and activity > 0.1 and self.nav_target is None:
             self.action_timer = now + random.uniform(4.0, 8.0) / max(0.2, activity)
             roll = random.random()
             if roll < 0.55:
@@ -90,20 +97,36 @@ class SupermanCharacter(BaseCharacter):
         max_spd = 22.0 * speed_mult
         accel = 1.10 * speed_mult
 
-        # True vector to cursor without artificial offset
-        dx = cursor_x - self.x
-        dy = cursor_y - self.y
-        dist = math.hypot(dx, dy)
+        if self.nav_target is not None:
+            tx, ty = self.nav_target
+            dx = tx - self.x
+            dy = ty - self.y
+            dist = math.hypot(dx, dy)
+            self.facing_right = (dx >= 0.0)
 
-        if dist > 50.0:
-            self.vx += (dx / dist) * min(dist * 0.08, accel)
-            self.vy += (dy / dist) * min(dist * 0.08, accel)
-            self.state = CharacterState.FLY
+            if dist > 22.0:
+                self.vx += (dx / dist) * min(dist * 0.10, accel * 1.5)
+                self.vy += (dy / dist) * min(dist * 0.10, accel * 1.5)
+                self.state = CharacterState.FLY
+            else:
+                self.nav_target = None
+                self.state = CharacterState.HOVER
+                self.vx *= 0.70
+                self.vy *= 0.70
         else:
-            # Peaceful touch/petting deadzone
-            self.state = CharacterState.HOVER
-            self.vx *= 0.70
-            self.vy *= 0.70
+            dx = cursor_x - self.x
+            dy = cursor_y - self.y
+            dist = math.hypot(dx, dy)
+
+            if dist > 50.0:
+                self.vx += (dx / dist) * min(dist * 0.08, accel)
+                self.vy += (dy / dist) * min(dist * 0.08, accel)
+                self.state = CharacterState.FLY
+            else:
+                # Peaceful touch/petting deadzone
+                self.state = CharacterState.HOVER
+                self.vx *= 0.70
+                self.vy *= 0.70
 
         self.vx *= 0.91
         self.vy *= 0.91

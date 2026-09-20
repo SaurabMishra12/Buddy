@@ -4,7 +4,7 @@ import math
 import random
 import time
 import cairo
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, Optional
 from skins.base import BaseCharacter, CharacterState
 from skins.captain_america.shield import VibraniumShield
 from core.projectiles import DesktopProjectileWindow
@@ -18,19 +18,33 @@ class CaptainAmericaCharacter(BaseCharacter):
         super().__init__(x, y, skin_id="captain_america")
         self.can_fly = False
         self.shield = VibraniumShield(x - 12.0, y + 2.0)
+        self.stride = 0.0
         self.is_blocking = False
         self.block_end = 0.0
         self.is_hero_posing = False
         self.hero_pose_end = 0.0
+        self.is_dashing = False
+        self.dash_timer = 0.0
+        self.nav_target: Optional[Tuple[float, float]] = None
+        self.nav_stage = "IDLE"
+        self.nav_timer = 0.0
         self.action_timer = time.time() + random.uniform(4.0, 8.0)
         self.hitbox_radius = 46.0
 
     def get_shield_hand_pos(self) -> Tuple[float, float]:
         dir_mult = 1.0 if self.facing_right else -1.0
-        if self.is_blocking:
-            return self.x + dir_mult * 14.0, self.y - 2.0
+        if self.is_dashing or self.is_blocking:
+            return self.x + dir_mult * 18.0, self.y - 2.0
         else:
             return self.x - dir_mult * 10.0, self.y + 4.0
+
+    def nav_to(self, target_x: float, target_y: float) -> None:
+        """Initiate multi-stage superhero movement (run -> shield dash -> tactical slide)."""
+        self.nav_target = (target_x, target_y)
+        self.nav_stage = "RUN"
+        self.nav_timer = time.time()
+        self.is_hero_posing = False
+        self.is_blocking = False
 
     def trigger_ability(
         self,
@@ -68,6 +82,17 @@ class CaptainAmericaCharacter(BaseCharacter):
             particle_mgr.shockwave(hand_x, hand_y, max_radius=45.0, color=(0.4, 0.6, 1.0))
             audio_mgr.play("smash")
             return True
+        elif ability_name in ("shield_dash", "dash"):
+            self.is_dashing = True
+            self.dash_timer = time.time() + 0.9
+            dir_mult = 1.0 if (target_x >= self.x) else -1.0
+            self.facing_right = (dir_mult > 0)
+            self.vx = dir_mult * 24.0
+            self.state = CharacterState.RUN
+            particle_mgr.shockwave(self.x, self.y + 12, max_radius=55.0, color=(0.2, 0.5, 1.0), line_width=3.5)
+            particle_mgr.burst_sparks(self.x, self.y + 12, count=16, color=(1.0, 0.9, 0.3), size=2.8)
+            audio_mgr.play("smash")
+            return True
         elif ability_name in ("hero_pose", "victory", "pose", "salute"):
             self.is_hero_posing = True
             self.hero_pose_end = time.time() + 2.5
@@ -94,13 +119,18 @@ class CaptainAmericaCharacter(BaseCharacter):
         now = time.time()
         min_x, min_y, screen_w, screen_h = screen_bounds
         activity = config_data.get("activity_level", 1.0)
-        ground_y = min_y + screen_h - 65.0
+        speed_mult = config_data.get("speed", 1.0)
+        ground_y = min_y + screen_h - 70.0
 
         # Facing direction
-        self.facing_right = (cursor_x >= self.x)
+        if self.nav_target is None:
+            self.facing_right = (cursor_x >= self.x)
 
         if self.is_blocking and now >= self.block_end:
             self.is_blocking = False
+
+        if self.is_dashing and now >= self.dash_timer and self.nav_target is None:
+            self.is_dashing = False
 
         if self.is_hero_posing:
             if now >= self.hero_pose_end:
@@ -113,47 +143,109 @@ class CaptainAmericaCharacter(BaseCharacter):
                     particle_mgr.burst_sparks(self.x, self.y - 6, count=1, color=(1.0, 0.88, 0.3), size=2.0)
 
         # Random personality events
-        if now >= self.action_timer and activity > 0.1 and not self.is_hero_posing:
+        if now >= self.action_timer and activity > 0.1 and not self.is_hero_posing and self.nav_target is None:
             self.action_timer = now + random.uniform(5.0, 9.0) / max(0.2, activity)
             roll = random.random()
-            if roll < 0.45:
+            if roll < 0.40:
                 self.trigger_ability("shield_throw", cursor_x, cursor_y, particle_mgr, audio_mgr)
-            elif roll < 0.70:
+            elif roll < 0.65:
                 self.trigger_ability("shield_block", cursor_x, cursor_y, particle_mgr, audio_mgr)
-            elif roll < 0.90:
+            elif roll < 0.85:
+                self.trigger_ability("shield_dash", cursor_x, cursor_y, particle_mgr, audio_mgr)
+            elif roll < 0.95:
                 self.trigger_ability("hero_pose", cursor_x, cursor_y, particle_mgr, audio_mgr)
 
-        # Ground sprint & run physics
-        speed_mult = config_data.get("speed", 1.0)
-        max_spd = 14.0 * speed_mult
-        accel = 0.75 * speed_mult
+        # 1. MULTI-STAGE NAVIGATION (Run -> Shield Dash -> Tactical Slide)
+        if self.nav_target is not None:
+            tx, ty = self.nav_target
+            dx = tx - self.x
+            dist_x = abs(dx)
+            self.facing_right = (dx >= 0.0)
 
-        # True vector to cursor without artificial offset
-        dx = cursor_x - self.x
-        dist_x = abs(dx)
+            if dist_x < 24.0:
+                self.nav_target = None
+                self.nav_stage = "IDLE"
+                self.is_dashing = False
+                self.state = CharacterState.IDLE
+                self.vx = 0.0
+                particle_mgr.smoke_puff(self.x, self.y + 20, count=3)
+            else:
+                elapsed = time.time() - self.nav_timer
+                if dist_x > 130.0:
+                    if self.nav_stage == "RUN":
+                        # Stage 1: Sprint to build forward momentum
+                        self.state = CharacterState.RUN
+                        self.stride += 0.28 * speed_mult
+                        dir_sign = 1.0 if dx > 0 else -1.0
+                        self.vx = dir_sign * 14.0 * speed_mult
+                        if elapsed > 0.25:
+                            self.nav_stage = "DASH"
+                            self.is_dashing = True
+                            self.nav_timer = time.time()
+                            self.vx = dir_sign * 23.0 * speed_mult
+                            audio_mgr.play("smash")
+                            particle_mgr.shockwave(self.x, self.y + 12, max_radius=55.0, color=(0.2, 0.5, 1.0), line_width=3.5)
+                            particle_mgr.burst_sparks(self.x, self.y + 12, count=16, color=(1.0, 0.9, 0.3), size=2.8)
+                    elif self.nav_stage == "DASH":
+                        # Stage 2: Shield Dash at high speed
+                        self.is_dashing = True
+                        self.state = CharacterState.RUN
+                        dir_sign = 1.0 if dx > 0 else -1.0
+                        self.vx = dir_sign * 23.0 * speed_mult
+                        if random.random() < 0.5:
+                            particle_mgr.burst_sparks(self.x - dir_sign * 16, self.y + 14, count=2, color=(0.2, 0.6, 1.0))
+                            particle_mgr.smoke_puff(self.x - dir_sign * 18, self.y + 22, count=1)
+                        if dist_x < 85.0:
+                            # Stage 3: Decelerate into tactical combat slide
+                            self.nav_stage = "SLIDE"
+                            self.is_dashing = False
+                            self.nav_timer = time.time()
+                            particle_mgr.smoke_puff(self.x, self.y + 24, count=4)
+                    elif self.nav_stage == "SLIDE":
+                        # Stage 3: Combat slide to stop
+                        self.vx *= 0.82
+                        if random.random() < 0.4:
+                            particle_mgr.smoke_puff(self.x, self.y + 24, count=1)
+                        if dist_x < 28.0 or abs(self.vx) < 1.5:
+                            self.nav_target = None
+                            self.nav_stage = "IDLE"
+                            self.state = CharacterState.IDLE
+                            self.vx = 0.0
+                else:
+                    # Short range: Tactical sprint directly to point
+                    self.state = CharacterState.RUN
+                    self.stride += 0.25 * speed_mult
+                    dir_sign = 1.0 if dx > 0 else -1.0
+                    self.vx = dir_sign * min(14.0, max(4.0, dist_x * 0.16))
 
-        if self.is_hero_posing:
+        # 2. STANDARD GROUND WANDER (When not navigating)
+        elif self.is_hero_posing:
             # Stand firmly planted during Hero Pose
             self.vx *= 0.50
             self.state = CharacterState.VICTORY
-        elif dist_x > 45.0:
-            self.vx += (1.0 if dx > 0 else -1.0) * min(dist_x * 0.08, accel)
-            self.state = CharacterState.RUN
-            # Dust puffs when sprinting
-            if random.random() < 0.2:
-                particle_mgr.smoke_puff(self.x, self.y + 24, count=1)
         else:
-            # Peaceful touch/petting deadzone
-            self.state = CharacterState.IDLE
-            self.vx *= 0.70
+            dx = cursor_x - self.x
+            dist_x = abs(dx)
+            max_spd = 14.0 * speed_mult
+            accel = 0.75 * speed_mult
 
-        self.vx *= 0.88
+            if dist_x > 45.0:
+                self.vx += (1.0 if dx > 0 else -1.0) * min(dist_x * 0.08, accel)
+                self.state = CharacterState.RUN
+                # Dust puffs when sprinting
+                if random.random() < 0.2:
+                    particle_mgr.smoke_puff(self.x, self.y + 24, count=1)
+            else:
+                # Peaceful touch/petting deadzone
+                self.state = CharacterState.IDLE
+                self.vx *= 0.70
+
+            self.vx *= 0.88
+            spd = abs(self.vx)
+            if spd > max_spd:
+                self.vx = (self.vx / spd) * max_spd
+
         self.vy = 0.0
-
-        spd = abs(self.vx)
-        if spd > max_spd:
-            self.vx = (self.vx / spd) * max_spd
-
         self.x += self.vx
         self.y = ground_y
 
@@ -167,12 +259,23 @@ class CaptainAmericaCharacter(BaseCharacter):
         if not self.facing_right:
             ctx.scale(-1.0, 1.0)
 
-        # Dynamic running stride and forward soldier charge lean
+        # Dynamic running stride, forward soldier charge lean, or aerodynamic shield dash
         spd = abs(self.vx)
         is_running = (self.state == CharacterState.RUN or spd > 2.0) and not self.is_hero_posing
 
         run_cycle = self.anim_time * 12.0
-        if is_running:
+        if self.is_dashing:
+            ctx.rotate(0.38)  # Aerodynamic forward shield dash
+            # Draw sonic speedlines behind
+            ctx.save()
+            ctx.set_source_rgba(0.3, 0.7, 1.0, 0.5)
+            ctx.set_line_width(2.0)
+            for sl_y in [-12, -4, 6, 14]:
+                ctx.move_to(-25, sl_y)
+                ctx.line_to(-48, sl_y)
+            ctx.stroke()
+            ctx.restore()
+        elif is_running:
             bob = -abs(math.sin(run_cycle)) * 2.5
             ctx.translate(0, bob)
             ctx.rotate(0.22)  # ~13° super-soldier forward combat charge

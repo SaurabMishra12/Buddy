@@ -39,3 +39,4 @@ env/
 *.log
 .cache/
 .tmp/
+scratch/
