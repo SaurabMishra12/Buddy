@@ -16,10 +16,12 @@ except (ValueError, ImportError):
         appindicator = None
 
 from gi.repository import Gtk, GLib
+from skins.manager import skin_manager
+from pomodoro.manager import PomodoroState
 
 
 class BuddyTray:
-    """Linux system tray / app indicator for quick Buddy controls."""
+    """Rich Linux system tray indicator for Buddy 2.0."""
 
     def __init__(self, engine: Any):
         self.engine = engine
@@ -28,7 +30,6 @@ class BuddyTray:
             print("[Buddy Tray] Note: AppIndicator not available on this system, tray icon omitted.")
             return
 
-        # Find or use fallback icon
         icon_path = "applications-games"
         self.indicator = appindicator.Indicator.new(
             "buddy-desktop-pet",
@@ -44,42 +45,109 @@ class BuddyTray:
 
         menu = Gtk.Menu()
 
-        # Title / Status
-        title_item = Gtk.MenuItem(label=f"Buddy — Skin: {self.engine.character.skin_id.capitalize()}")
+        # 1. Title / Header
+        title_item = Gtk.MenuItem(label=f"Buddy 2.0 — {self.engine.character.skin_id.replace('_', ' ').title()}")
         title_item.set_sensitive(False)
         menu.append(title_item)
         menu.append(Gtk.SeparatorMenuItem())
 
-        # Change Skin item
-        skin_item = Gtk.MenuItem(label="Change Character Skin...")
-        skin_item.connect("activate", self._on_change_skin)
-        menu.append(skin_item)
+        # 2. Current Skin Submenu
+        skin_sub = Gtk.MenuItem(label="Current Skin")
+        skin_menu = Gtk.Menu()
+        skin_sub.set_submenu(skin_menu)
+        for s in skin_manager.get_available_skins():
+            sid = s["id"]
+            prefix = "✓ " if sid == self.engine.character.skin_id else "   "
+            item = Gtk.MenuItem(label=f"{prefix}{s.get('name', sid)}")
+            item.connect("activate", lambda _, id=sid: (self.engine.switch_skin(id), self.update_menu()))
+            skin_menu.append(item)
+        menu.append(skin_sub)
 
-        # Pause / Resume item
-        pause_label = "Resume Buddy" if self.engine.paused else "Pause Buddy"
-        pause_item = Gtk.MenuItem(label=pause_label)
-        pause_item.connect("activate", self._on_toggle_pause)
-        menu.append(pause_item)
+        # 3. Pomodoro Submenu
+        pomo = getattr(self.engine, "pomodoro", None)
+        if pomo:
+            pomo_sub = Gtk.MenuItem(label=f"Pomodoro ({pomo.status_label})")
+            pomo_menu = Gtk.Menu()
+            pomo_sub.set_submenu(pomo_menu)
 
-        # Click-through toggle item
-        click_item = Gtk.CheckMenuItem(label="100% Click-Through Overlay")
-        click_item.set_active(self.engine.click_through)
-        click_item.connect("toggled", self._on_toggle_click_through)
-        menu.append(click_item)
+            if pomo.state in (PomodoroState.WORK, PomodoroState.SHORT_BREAK, PomodoroState.LONG_BREAK):
+                t_item = Gtk.MenuItem(label="Pause")
+                t_item.connect("activate", lambda _: (pomo.pause(), self.update_menu()))
+                pomo_menu.append(t_item)
+            elif pomo.state == PomodoroState.PAUSED:
+                t_item = Gtk.MenuItem(label="Resume")
+                t_item.connect("activate", lambda _: (pomo.resume(), self.update_menu()))
+                pomo_menu.append(t_item)
+            else:
+                t_item = Gtk.MenuItem(label="Start Focus")
+                t_item.connect("activate", lambda _: (pomo.start_work(), self.update_menu()))
+                pomo_menu.append(t_item)
 
-        # Settings item
+            sk_item = Gtk.MenuItem(label="Skip to Next")
+            sk_item.connect("activate", lambda _: (pomo.skip(), self.update_menu()))
+            pomo_menu.append(sk_item)
+
+            r_item = Gtk.MenuItem(label="Reset")
+            r_item.connect("activate", lambda _: (pomo.reset(), self.update_menu()))
+            pomo_menu.append(r_item)
+
+            menu.append(pomo_sub)
+
+        # 4. Buddy Mode Submenu
+        mode_sub = Gtk.MenuItem(label="Buddy Mode")
+        mode_menu = Gtk.Menu()
+        mode_sub.set_submenu(mode_menu)
+
+        ct_item = Gtk.CheckMenuItem(label="Click-through")
+        ct_item.set_active(self.engine.click_through)
+        ct_item.connect("toggled", lambda w: self.engine.toggle_click_through())
+        mode_menu.append(ct_item)
+
+        focus_item = Gtk.CheckMenuItem(label="Focus Mode")
+        focus_item.set_active(self.engine.config.get("focus_mode", False))
+        focus_item.connect("toggled", lambda w: self.engine.config.set("focus_mode", w.get_active()))
+        mode_menu.append(focus_item)
+
+        quiet_item = Gtk.CheckMenuItem(label="Quiet Mode")
+        quiet_item.set_active(not self.engine.audio.enabled)
+        quiet_item.connect("toggled", lambda w: self._toggle_sound(not w.get_active()))
+        mode_menu.append(quiet_item)
+
+        menu.append(mode_sub)
+
+        # 5. Size Submenu
+        size_sub = Gtk.MenuItem(label="Size")
+        size_menu = Gtk.Menu()
+        size_sub.set_submenu(size_menu)
+        for label, sc in [("Small", 0.75), ("Medium", 1.0), ("Large", 1.35)]:
+            cur_sc = getattr(self.engine.character, "scale", 1.0)
+            chk = "✓ " if abs(cur_sc - sc) < 0.1 else "   "
+            s_item = Gtk.MenuItem(label=f"{chk}{label}")
+            s_item.connect("activate", lambda _, val=sc: self.engine.set_scale(val))
+            size_menu.append(s_item)
+        menu.append(size_sub)
+
+        menu.append(Gtk.SeparatorMenuItem())
+
+        # 6. Settings, Skin Gallery, Statistics, Help, Quit
         settings_item = Gtk.MenuItem(label="Settings...")
         settings_item.connect("activate", self._on_open_settings)
         menu.append(settings_item)
 
+        gallery_item = Gtk.MenuItem(label="Skin Gallery...")
+        gallery_item.connect("activate", self._on_change_skin)
+        menu.append(gallery_item)
+
+        stats_item = Gtk.MenuItem(label="Statistics...")
+        stats_item.connect("activate", self._on_open_stats)
+        menu.append(stats_item)
+
+        help_item = Gtk.MenuItem(label="Help & Shortcuts...")
+        help_item.connect("activate", self._on_help)
+        menu.append(help_item)
+
         menu.append(Gtk.SeparatorMenuItem())
 
-        # About item
-        about_item = Gtk.MenuItem(label="About Buddy")
-        about_item.connect("activate", self._on_about)
-        menu.append(about_item)
-
-        # Quit item
         quit_item = Gtk.MenuItem(label="Quit Buddy")
         quit_item.connect("activate", lambda _: Gtk.main_quit())
         menu.append(quit_item)
@@ -90,24 +158,40 @@ class BuddyTray:
     def _on_change_skin(self, widget: Gtk.Widget) -> None:
         from ui.skin_selector import show_skin_selector
         show_skin_selector(self.engine)
-
-    def _on_toggle_pause(self, widget: Gtk.Widget) -> None:
-        self.engine.toggle_pause()
         self.update_menu()
-
-    def _on_toggle_click_through(self, widget: Gtk.CheckMenuItem) -> None:
-        self.engine.toggle_click_through()
 
     def _on_open_settings(self, widget: Gtk.Widget) -> None:
         from ui.settings_dialog import show_settings_dialog
         show_settings_dialog(self.engine)
+        self.update_menu()
 
-    def _on_about(self, widget: Gtk.Widget) -> None:
-        about = Gtk.AboutDialog()
-        about.set_program_name("Buddy")
-        about.set_version("1.0.0")
-        about.set_comments("A modern, extensible Linux desktop pet application designed for Fedora Linux.")
-        about.set_website("https://github.com/SaurabMishra12/Buddy")
-        about.set_website_label("Buddy Desktop Companion")
-        about.run()
-        about.destroy()
+    def _on_open_stats(self, widget: Gtk.Widget) -> None:
+        from ui.stats_dialog import show_stats_dialog
+        show_stats_dialog(self.engine)
+
+    def _toggle_sound(self, enabled: bool) -> None:
+        self.engine.audio.enabled = enabled
+        self.engine.config.set("sound_enabled", enabled)
+
+    def _on_help(self, widget: Gtk.Widget) -> None:
+        dialog = Gtk.MessageDialog(
+            transient_for=None,
+            flags=0,
+            message_type=Gtk.MessageType.INFO,
+            buttons=Gtk.ButtonsType.OK,
+            text="Buddy 2.0 — Linux Desktop Companion"
+        )
+        dialog.format_secondary_markup(
+            "<b>Controls:</b>\n"
+            "• <b>Left Click & Drag:</b> Move / play with your companion\n"
+            "• <b>Double Click:</b> Execute signature ability / acrobatic stunt\n"
+            "• <b>Middle Click / Scroll:</b> Cycle characters\n"
+            "• <b>Right Click:</b> Context menu with Pomodoro and modes\n\n"
+            "<b>CLI Commands:</b>\n"
+            "<code>buddy --skin [name]</code>\n"
+            "<code>buddy --pomodoro [start|pause|resume|reset|status]</code>\n"
+            "<code>buddy --stats</code>\n"
+            "<code>buddy --skin-gallery</code>"
+        )
+        dialog.run()
+        dialog.destroy()

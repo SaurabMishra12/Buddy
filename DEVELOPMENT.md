@@ -1,6 +1,6 @@
-# 🛠️ Buddy Developer Guide & Architecture
+# 🛠️ Buddy 2.0 Developer Guide & Architecture
 
-This document describes the internal architecture of **Buddy** and how to contribute, debug, and extend the engine.
+This document describes the internal architecture of **Buddy 2.0** and how to contribute, debug, and extend the engine.
 
 ---
 
@@ -9,36 +9,61 @@ This document describes the internal architecture of **Buddy** and how to contri
 Buddy is architected into modular sub-engines:
 
 ```text
-Buddy Desktop Pet Engine
+Buddy Desktop Platform Engine
 │
 ├── core/
-│   ├── engine.py       # Main simulation loop, layer rendering, FPS pacing, HUD
+│   ├── engine.py       # Main simulation loop, layer rendering, FPS pacing, HUD, Pomodoro integration
 │   ├── window.py       # RGBA overlay window, X11/XWayland input shape transparency
 │   ├── physics.py      # 2D physics equations: velocity, gravity, drag, bounce, screen bounds
-│   ├── particles.py    # Spark, flame, smoke, shockwave, and lightning bolt manager
+│   ├── particles.py    # Spark, flame, smoke, shockwave, heart, star, confetti, dust, energy orbs
 │   ├── audio.py        # Non-blocking sound triggers (pw-play / paplay / aplay / canberra)
 │   ├── config.py       # Configuration schema and ~/.config/buddy/config.json persistence
 │   └── tray.py         # AppIndicator3 system tray menu
+│
+├── behavior/
+│   ├── personality.py  # CharacterPersonality profile (energy, curiosity, playfulness, sleepiness)
+│   ├── state_machine.py# CharacterBehavior autonomous state machine (Focus, Break, Walk, Play, Idle)
+│   └── memory.py       # Local character memory (~/.config/buddy/memory/{skin_id}.json)
+│
+├── pomodoro/
+│   ├── manager.py      # PomodoroManager state machine (work, short break, long break, countdown)
+│   ├── statistics.py   # PomodoroStats daily/weekly/streak metrics (~/.config/buddy/pomodoro_stats.json)
+│   └── notifications.py# Desktop notification dispatcher (DBus / notify-send)
+│
+├── rendering/
+│   └── animation.py    # Easing primitives: bounce, elastic, ease_in, ease_out, spring_step
 │
 ├── skins/
 │   ├── base.py         # BaseCharacter & BaseProjectile interfaces
 │   ├── manager.py      # Skin registry, validation, and factory loader
 │   ├── thor/           # Preserved Thor, cloth cape simulation, Mjolnir projectile
-│   ├── dragon/         # Wing flapping, fire breath cone, fireball projectiles
+│   ├── dragon/         # Procedural Dreadwyrm, wing flapping, fire breath cone
 │   ├── cat/            # Ground movement, pouncing, grooming, sleep states
 │   ├── dog/            # Playful bouncing, tail wagging, barking, digging
 │   ├── hulk/           # Ground smashes, shockwaves, screen shake, roar rage
-│   ├── ironman/        # Jet thrusters, repulsor blast, supersonic air dash
+│   ├── ironman/        # Jet thrusters, unibeam reactor repulsor, flight kinematics
 │   ├── harry_potter/   # Wand spell sparks, broom flight, smoke teleportation
 │   ├── captain_america/# Vibranium Shield throw/ricochet/return physics, block guard
 │   ├── thanos/         # Infinity Gauntlet with 6 Stone abilities and The Snap
 │   ├── batman/         # Grappling hook physics, cape gliding, batarangs
-│   └── superman/       # Supersonic flight, twin eye laser heat vision
+│   ├── superman/       # Supersonic flight, speed trails, twin eye laser heat vision
+│   ├── spiderman/      # Acrobatic web-swinging rope, web throws, upside-down perch
+│   ├── pixel_wizard/   # Magic arcane orbs, spatial teleportation, runic circles
+│   ├── space_robot/    # Cybernetic droid, laser scanning beam, holographic display
+│   ├── ninja/          # Smoke bomb vanishing, shuriken throwing, wall leaps
+│   ├── vampire/        # Crimson cape levitation, bat swarm summons, shadow mist
+│   ├── fairy/          # Gossamer wings, sparkle trails, stardust healing radiance
+│   ├── alien/          # UFO tractor beams, anti-gravity pulses, warp teleports
+│   ├── ghost/          # Ethereal floating, phase shift fade, friendly spooks
+│   ├── penguin/        # Cheerful Antarctic penguin, belly slide, snowball tosses
+│   ├── fox/            # Red fox swift sprints, bushy tail wags, playful pounces
+│   └── slime/          # Bouncy jelly creature, squash-and-stretch bounce, bubbly splits
 │
 └── ui/
-    ├── skin_selector.py   # Visual character picker gallery
-    ├── settings_dialog.py # Full preferences and system startup dialog
-    └── context_menu.py    # Right-click context menu
+    ├── skin_selector.py   # Visual character gallery with categories, search, personality metrics
+    ├── settings_dialog.py # 6-tab preferences dialog (General, Behavior, Appearance, Pomodoro, Performance, A11y)
+    ├── stats_dialog.py    # Productivity & focus sprint statistics dashboard
+    └── context_menu.py    # Right-click context menu with Pomodoro controls and companion modes
 ```
 
 ---
@@ -46,16 +71,18 @@ Buddy Desktop Pet Engine
 ## 🔬 Physics & Simulation Loop
 
 1. **Input Polling**: Queries the root pointer position from the GDK default seat at each frame interval (16.6ms for 60 FPS).
-2. **Physics Integration**:
-   - Acceleration towards cursor:
-     $$v_{next} = (v + a \cdot \Delta t) \times \mu$$
-   - Boundary constraints clamp or bounce with coefficient of restitution.
-3. **Particle Updates**:
-   - All sparks, flames, smoke, and shockwaves step forward; dead particles ($\text{life} \le 0$) are pruned.
-   - Global particle ceiling prevents memory growth.
-4. **Window Draw Event**:
-   - `cairo.OPERATOR_CLEAR` wipes previous frame.
-   - `cairo.OPERATOR_OVER` renders background effects $\to$ character $\to$ projectiles $\to$ foreground particles.
+2. **Pomodoro Synchronization**:
+   - Updates countdown timer on every tick (`self.pomodoro.tick(dt)`).
+   - Injects Pomodoro state (`WORK`, `SHORT_BREAK`, `LONG_BREAK`, `PAUSED`) into character behavior engine.
+3. **Autonomous Behavior Selection**:
+   - `CharacterBehavior.evaluate_next_action` evaluates cursor distance, idle duration, and personality disposition to choose state transitions.
+4. **Particle Updates**:
+   - Advances sparks, flames, smoke, shockwaves, stars, hearts, confetti, dust, and energy orbs.
+   - Enforces configurable particle ceilings to prevent runaway CPU or memory usage.
+5. **Window Draw Event**:
+   - `cairo.OPERATOR_CLEAR` wipes previous frame for transparent background.
+   - `cairo.OPERATOR_OVER` renders character, projectiles, and particle effects.
+   - Optionally renders the floating Pomodoro pill badge and developer telemetry HUD.
 
 ---
 
@@ -68,18 +95,16 @@ buddy --debug
 ```
 
 The HUD displays:
-* Current active Skin ID
-* State machine state (`IDLE`, `WALK`, `FLY`, `HOVER`, `SUMMONING`, `JUMP`, etc.)
-* Position and Velocity vectors
-* Target cursor coordinates
-* Real-time FPS vs Target FPS
+* Active Skin ID & Target FPS
 * Active particle count
+* State machine state (`IDLE`, `WALK`, `RUN`, `FLY`, `HOVER`, `FOCUS`, `BREAK`, etc.)
+* Live Pomodoro status and countdown timer
 
 ---
 
 ## 🧪 Running Unit Tests
 
-Run the full test suite anytime during development:
+Run the full automated test suite anytime during development:
 
 ```bash
 python3 -m unittest discover -s tests -p "test_*.py" -v

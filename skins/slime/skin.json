@@ -1,0 +1,24 @@
+{
+  "id": "slime",
+  "name": "Bouncy Slime",
+  "category": "cute",
+  "description": "A cheerful jelly creature that bounces with squash-and-stretch physics and splits into tiny bubbly drops.",
+  "canFly": false,
+  "speed": 1.1,
+  "personality": {
+    "energy": 0.85,
+    "curiosity": 0.80,
+    "playfulness": 0.95,
+    "sleepiness": 0.20,
+    "interaction_rate": 0.90
+  },
+  "abilities": ["super_bounce", "jelly_split", "wobble"],
+  "sounds": {
+    "squish": "sparkle.wav"
+  },
+  "pomodoro": {
+    "work": "puddle_sleep",
+    "break": "bounce_party",
+    "celebrate": "fountain_split"
+  }
+}

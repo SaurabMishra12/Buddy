@@ -1,0 +1,24 @@
+{
+  "id": "vampire",
+  "name": "Vampire",
+  "category": "fantasy",
+  "description": "Charming night-stalking vampire with a flowing crimson-lined cape, bat swarm summons, and shadow mist glides.",
+  "canFly": true,
+  "speed": 1.15,
+  "personality": {
+    "energy": 0.70,
+    "curiosity": 0.60,
+    "playfulness": 0.50,
+    "sleepiness": 0.45,
+    "interaction_rate": 0.75
+  },
+  "abilities": ["shadow_glide", "bat_swarm", "mist_fade"],
+  "sounds": {
+    "swoosh": "swoosh.wav"
+  },
+  "pomodoro": {
+    "work": "coffin_slumber",
+    "break": "midnight_feast",
+    "celebrate": "vampiric_waltz"
+  }
+}

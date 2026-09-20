@@ -1,0 +1,25 @@
+{
+  "id": "ghost",
+  "name": "Ghost",
+  "category": "cute",
+  "description": "Adorable spectral phantom who floats through windows, fades into the ether, and gives playful friendly spooks.",
+  "canFly": true,
+  "speed": 1.1,
+  "personality": {
+    "energy": 0.70,
+    "curiosity": 0.85,
+    "playfulness": 0.95,
+    "sleepiness": 0.30,
+    "interaction_rate": 0.90
+  },
+  "abilities": ["spectral_fade", "ethereal_float", "spook_burst"],
+  "sounds": {
+    "magic": "magic.wav",
+    "swoosh": "swoosh.wav"
+  },
+  "pomodoro": {
+    "work": "haunting_silence",
+    "break": "poltergeist_party",
+    "celebrate": "confetti_spook"
+  }
+}

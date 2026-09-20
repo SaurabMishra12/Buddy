@@ -1,0 +1,24 @@
+{
+  "id": "ninja",
+  "name": "Ninja",
+  "category": "original",
+  "description": "Silent shadow assassin with lightning-fast dashes, smoke bomb vanishings, and spinning shurikens.",
+  "canFly": false,
+  "speed": 1.35,
+  "personality": {
+    "energy": 0.88,
+    "curiosity": 0.55,
+    "playfulness": 0.40,
+    "sleepiness": 0.20,
+    "interaction_rate": 0.70
+  },
+  "abilities": ["smoke_teleport", "shuriken_strike", "shadow_dash"],
+  "sounds": {
+    "swoosh": "swoosh.wav"
+  },
+  "pomodoro": {
+    "work": "silent_meditation",
+    "break": "shadow_kata",
+    "celebrate": "smoke_escape"
+  }
+}

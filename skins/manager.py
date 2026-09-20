@@ -23,6 +23,16 @@ BUILTIN_SKINS: Dict[str, Tuple[str, str]] = {
     "batman": ("skins.batman.character", "BatmanCharacter"),
     "superman": ("skins.superman.character", "SupermanCharacter"),
     "spiderman": ("skins.spiderman.character", "SpiderManCharacter"),
+    "pixel_wizard": ("skins.pixel_wizard.character", "PixelWizardCharacter"),
+    "space_robot": ("skins.space_robot.character", "SpaceRobotCharacter"),
+    "ninja": ("skins.ninja.character", "NinjaCharacter"),
+    "vampire": ("skins.vampire.character", "VampireCharacter"),
+    "fairy": ("skins.fairy.character", "FairyCharacter"),
+    "alien": ("skins.alien.character", "AlienCharacter"),
+    "ghost": ("skins.ghost.character", "GhostCharacter"),
+    "penguin": ("skins.penguin.character", "PenguinCharacter"),
+    "fox": ("skins.fox.character", "FoxCharacter"),
+    "slime": ("skins.slime.character", "SlimeCharacter"),
 }
 
 
@@ -54,7 +64,17 @@ class SkinManager:
             ("thanos", "Thanos", "Titan wielding the 6 Infinity Stones with cosmic energy bursts.", ["time_stone", "reality_warp", "space_teleport", "power_blast", "the_snap"]),
             ("batman", "Batman", "Dark Knight grappling, cape gliding, and throwing batarangs.", ["grapple", "cape_glide", "batarang", "perch"]),
             ("superman", "Superman", "Man of Steel flying at supersonic speed with laser heat vision.", ["heat_vision", "supersonic_flight", "super_jump"]),
-            ("spiderman", "Spider-Man", "Your friendly neighborhood Spider-Man with acrobatic web-swinging, web throws, and spider-sense.", ["web_swing", "web_throw", "spider_sense", "wall_crawl", "perch"])
+            ("spiderman", "Spider-Man", "Your friendly neighborhood Spider-Man with acrobatic web-swinging, web throws, and spider-sense.", ["web_swing", "web_throw", "spider_sense", "wall_crawl", "perch"]),
+            ("pixel_wizard", "Pixel Wizard", "Mystic scholar channeling glowing arcane orbs, runes, and spatial teleports.", ["magic_orb", "teleport", "spell_circle"]),
+            ("space_robot", "Space Robot", "Advanced cybernetic droid equipped with rocket thrusters, laser scanners, and holograms.", ["jet_boost", "hologram", "scan_beam"]),
+            ("ninja", "Ninja", "Shadow shinobi mastering silent leaps, shuriken barrages, and smoke vanishing.", ["smoke_bomb", "shuriken", "wall_leap"]),
+            ("vampire", "Vampire", "Noble lord of shadows levitating in a cape with swarms of bats.", ["bat_swarm", "shadow_mist", "levitate"]),
+            ("fairy", "Fairy", "Enchanted sprite with iridescent wings casting sparkling dust and healing radiance.", ["sparkle_burst", "fairy_dust", "flutter"]),
+            ("alien", "Alien", "Cosmic traveler hovering with anti-gravity bubbles and UFO tractor beams.", ["tractor_beam", "teleport", "alien_glow"]),
+            ("ghost", "Ghost", "Spectral phantom fading through windows with eerie floating and spirit orbs.", ["phase_shift", "boo_spook", "spectral_glow"]),
+            ("penguin", "Penguin", "Adorable arctic penguin belly-sliding across the screen and waddling cheerfully.", ["belly_slide", "peck_dance", "snow_hop"]),
+            ("fox", "Fox", "Clever woodland red fox with a bushy tail, rapid sprints, and playful pounces.", ["dash_sprint", "pounce_jump", "tail_flick"]),
+            ("slime", "Bouncy Slime", "Cheerful jelly creature that bounces with squash-and-stretch physics and splits droplets.", ["super_bounce", "jelly_split", "wobble"]),
         ]
 
         for skin_id, name, desc, abilities in skin_defs:
@@ -64,9 +84,9 @@ class SkinManager:
                 "name": name,
                 "description": desc,
                 "speed": 1.0,
-                "canFly": "flight" in abilities or "glide" in abilities or "web_swing" in abilities,
+                "canFly": "flight" in abilities or "glide" in abilities or "web_swing" in abilities or "levitate" in abilities or "flutter" in abilities or "tractor_beam" in abilities or "phase_shift" in abilities,
                 "abilities": abilities,
-                "category": "superhero" if skin_id in ["thor", "hulk", "ironman", "captain_america", "batman", "superman", "thanos", "spiderman"] else ("pet" if skin_id in ["cat", "dog"] else "fantasy")
+                "category": "superhero" if skin_id in ["thor", "hulk", "ironman", "captain_america", "batman", "superman", "thanos", "spiderman"] else ("animals" if skin_id in ["cat", "dog", "penguin", "fox"] else ("fantasy" if skin_id in ["dragon", "pixel_wizard", "fairy", "vampire", "ghost"] else ("sci-fi" if skin_id in ["space_robot", "alien"] else "cute")))
             }
             if meta_path.exists():
                 try:
@@ -105,9 +125,15 @@ class SkinManager:
             "harrypotter": "harry_potter",
             "harry": "harry_potter",
             "potter": "harry_potter",
-            "cap": "captain_america"
+            "cap": "captain_america",
+            "wizard": "pixel_wizard",
+            "pixelwizard": "pixel_wizard",
+            "robot": "space_robot",
+            "spacerobot": "space_robot",
+            "bouncy_slime": "slime",
         }
         return aliases.get(raw, raw)
+
 
     def get_available_skins(self) -> List[Dict[str, Any]]:
         """Return list of all registered skins metadata."""

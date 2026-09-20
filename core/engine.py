@@ -18,6 +18,7 @@ from core.audio import audio_manager
 from core.physics import ScreenShake
 from skins.manager import skin_manager
 from skins.base import BaseCharacter, CharacterState
+from pomodoro.manager import PomodoroManager, PomodoroState
 
 
 class BuddyEngine:
@@ -44,6 +45,10 @@ class BuddyEngine:
         self.audio.enabled = self.config.get("sound_enabled", True)
         self.audio.volume = self.config.get("sound_volume", 0.7)
         self.shake = ScreenShake()
+
+        # Pomodoro Productivity & Behavior synchronization
+        self.pomodoro = PomodoroManager(config=self.config)
+        self.pomodoro.add_listener(self._on_pomodoro_event)
 
         # Instantiate character at screen center
         raw_skin = requested_skin or self.config.get("skin", "thor")
@@ -276,9 +281,100 @@ class BuddyEngine:
             self.character.trigger_ability("upside_down_hang", cx, cy, self.particles, self.audio)
             self.particles.shockwave(cx, cy, max_radius=85.0, color=(0.94, 0.97, 1.0))
             self.audio.play("thwip")
-        else:
-            self.particles.burst_sparks(cx, cy, count=15)
+        elif skin_id == "pixel_wizard":
+            self.character.trigger_ability("magic_orb", self.cursor_x, self.cursor_y, self.particles, self.audio)
+            self.particles.burst_energy_orbs(cx, cy, count=6)
             self.audio.play("magic")
+        elif skin_id == "space_robot":
+            self.character.trigger_ability("scan_beam", self.cursor_x, self.cursor_y, self.particles, self.audio)
+            self.particles.burst_energy_orbs(cx, cy, count=5)
+            self.audio.play("laser")
+        elif skin_id == "ninja":
+            self.character.trigger_ability("smoke_bomb", cx, cy, self.particles, self.audio)
+            self.particles.smoke_puff(cx, cy, count=12)
+            self.audio.play("swoosh")
+        elif skin_id == "vampire":
+            self.character.trigger_ability("bat_swarm", self.cursor_x, self.cursor_y, self.particles, self.audio)
+            self.particles.burst_dust(cx, cy, count=8)
+            self.audio.play("magic")
+        elif skin_id == "fairy":
+            self.character.trigger_ability("sparkle_burst", cx, cy, self.particles, self.audio)
+            self.particles.burst_stars(cx, cy - 15, count=12)
+            self.audio.play("sparkle")
+        elif skin_id == "alien":
+            self.character.trigger_ability("tractor_beam", self.cursor_x, self.cursor_y, self.particles, self.audio)
+            self.particles.burst_energy_orbs(cx, cy, count=6)
+            self.audio.play("laser")
+        elif skin_id == "ghost":
+            self.character.trigger_ability("phase_shift", cx, cy, self.particles, self.audio)
+            self.particles.burst_energy_orbs(cx, cy, count=5)
+            self.audio.play("swoosh")
+        elif skin_id == "penguin":
+            self.character.trigger_ability("belly_slide", self.cursor_x, self.cursor_y, self.particles, self.audio)
+            self.particles.burst_dust(cx, cy + 15, count=6)
+            self.audio.play("bark")
+        elif skin_id == "fox":
+            self.character.trigger_ability("pounce_jump", self.cursor_x, self.cursor_y, self.particles, self.audio)
+            self.particles.burst_hearts(cx, cy - 15, count=4)
+            self.audio.play("bark")
+        elif skin_id == "slime":
+            self.character.trigger_ability("super_bounce", self.cursor_x, self.cursor_y, self.particles, self.audio)
+            self.particles.burst_confetti(cx, cy - 10, count=12)
+            self.audio.play("sparkle")
+        else:
+            if not self.character.trigger_ability("special", cx, cy, self.particles, self.audio):
+                self.particles.burst_sparks(cx, cy, count=15)
+                self.audio.play("magic")
+
+    def _on_pomodoro_event(self, event_name: str, state: str, remaining: float) -> None:
+        """Handle Pomodoro milestones and trigger character reactions, audio, and particles."""
+        cx, cy = self.character.x, self.character.y
+        skin_id = self.character.skin_id
+
+        if event_name == "work_start":
+            self.particles.burst_energy_orbs(cx, cy, count=4)
+            self.audio.play("laser" if skin_id in ("ironman", "space_robot") else "magic")
+            if hasattr(self.character, "memory") and self.character.memory:
+                self.character.memory.record_interaction("pomodoro_work_start")
+            if hasattr(self.character, "behavior") and self.character.behavior:
+                from behavior.state_machine import BehaviorState
+                self.character.behavior.transition_to(BehaviorState.FOCUS)
+
+        elif event_name == "break_start":
+            self.particles.burst_confetti(cx, cy - 20, count=16)
+            self.particles.burst_stars(cx, cy - 10, count=8)
+            self.audio.play("purr" if skin_id == "cat" else ("bark" if skin_id in ("dog", "fox") else "sparkle"))
+            if hasattr(self.character, "memory") and self.character.memory:
+                self.character.memory.record_interaction("pomodoro_break_start")
+            if hasattr(self.character, "behavior") and self.character.behavior:
+                from behavior.state_machine import BehaviorState
+                self.character.behavior.transition_to(BehaviorState.BREAK)
+
+        elif event_name == "work_completed":
+            self.particles.burst_confetti(cx, cy - 25, count=28)
+            self.particles.burst_stars(cx, cy - 15, count=14)
+            self.shake.trigger(8.0)
+            if skin_id == "thor":
+                self.audio.play("lightning")
+                self.window.trigger_sky_strike(cx, cy)
+            elif skin_id == "dragon":
+                self.audio.play("roar")
+                self.particles.flame_puff(cx, cy, count=3)
+            elif skin_id == "cat":
+                self.audio.play("purr")
+            elif skin_id == "hulk":
+                self.audio.play("smash")
+            else:
+                self.audio.play("sparkle")
+
+            if hasattr(self.character, "memory") and self.character.memory:
+                self.character.memory.record_pomodoro_session()
+            if hasattr(self.character, "behavior") and self.character.behavior:
+                from behavior.state_machine import BehaviorState
+                self.character.behavior.transition_to(BehaviorState.CELEBRATE)
+
+        elif event_name == "break_completed":
+            self.particles.burst_sparks(cx, cy, count=10)
 
     def on_tick(self) -> bool:
         """Master simulation tick."""
@@ -489,6 +585,12 @@ class BuddyEngine:
                         if self.character.skin_id == "cat":
                             self.character.tilt = 0.0
 
+                # Inject Pomodoro and Focus context for intelligent behavior selection
+                cfg_context = dict(self.config.data)
+                cfg_context["pomodoro_state"] = self.pomodoro.state
+                cfg_context["pomodoro_remaining"] = self.pomodoro.remaining_seconds
+                cfg_context["focus_mode"] = (self.pomodoro.state == PomodoroState.WORK) or self.config.get("focus_mode", False)
+
                 self.character.update(
                     dt,
                     self.cursor_x,
@@ -496,8 +598,11 @@ class BuddyEngine:
                     self.window.bounds,
                     self.particles,
                     self.audio,
-                    self.config.data
+                    cfg_context
                 )
+
+            # Advance Pomodoro countdown
+            self.pomodoro.tick(dt)
 
             # Move the floating window so (half_size, half_size) matches (character.x, character.y)
             self.window.move_to(self.character.x, self.character.y)
@@ -540,13 +645,70 @@ class BuddyEngine:
         if self.debug_mode:
             self._draw_debug_hud(ctx)
 
+        # 4. Floating Pomodoro status badge (compact glassmorphic pill above Buddy)
+        if self.pomodoro.state not in (PomodoroState.IDLE, PomodoroState.COMPLETED) and self.config.get("show_pomodoro_badge", True):
+            self._draw_pomodoro_badge(ctx)
+
         return False
 
-    def _draw_debug_hud(self, ctx: cairo.Context) -> None:
-        """Render compact developer telemetry badge."""
+    def _draw_pomodoro_badge(self, ctx: cairo.Context) -> None:
+        """Render a small, sleek floating focus/break pill badge near Buddy."""
         ctx.save()
-        ctx.set_source_rgba(0.05, 0.05, 0.1, 0.8)
-        ctx.rectangle(4, 4, 110, 34)
+        cx = self.window.half_size
+        cy = self.window.half_size - 48
+
+        is_work = (self.pomodoro.state == PomodoroState.WORK)
+        is_paused = (self.pomodoro.state == PomodoroState.PAUSED)
+        bg_r, bg_g, bg_b = (0.85, 0.25, 0.2) if is_work else ((0.85, 0.65, 0.15) if is_paused else (0.15, 0.75, 0.4))
+
+        text = f"{'PAUSE' if is_paused else ('FOCUS' if is_work else 'BREAK')} {self.pomodoro.remaining_formatted}"
+
+        # Pill background
+        pill_w = 78
+        pill_h = 18
+        px = cx - pill_w / 2.0
+        py = cy - pill_h / 2.0
+
+        ctx.set_source_rgba(0.08, 0.08, 0.12, 0.85)
+        # Rounded rectangle
+        r = 9.0
+        ctx.new_path()
+        ctx.arc(px + r, py + r, r, math.pi, 1.5 * math.pi)
+        ctx.arc(px + pill_w - r, py + r, r, 1.5 * math.pi, 2 * math.pi)
+        ctx.arc(px + pill_w - r, py + pill_h - r, r, 0, 0.5 * math.pi)
+        ctx.arc(px + r, py + pill_h - r, r, 0.5 * math.pi, math.pi)
+        ctx.close_path()
+        ctx.fill_preserve()
+
+        # Accent border
+        ctx.set_source_rgba(bg_r, bg_g, bg_b, 0.9)
+        ctx.set_line_width(1.2)
+        ctx.stroke()
+
+        # Progress bar under-glow
+        prog = self.pomodoro.progress
+        if prog > 0.0:
+            ctx.set_source_rgba(bg_r, bg_g, bg_b, 0.4)
+            ctx.rectangle(px + 4, py + pill_h - 3, (pill_w - 8) * prog, 1.5)
+            ctx.fill()
+
+        # Text label
+        ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95)
+        ctx.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+        ctx.set_font_size(9)
+        extents = ctx.text_extents(text)
+        tx = cx - extents.width / 2.0 - extents.x_bearing
+        ty = cy - extents.height / 2.0 - extents.y_bearing
+        ctx.move_to(tx, ty)
+        ctx.show_text(text)
+
+        ctx.restore()
+
+    def _draw_debug_hud(self, ctx: cairo.Context) -> None:
+        """Render comprehensive developer telemetry badge."""
+        ctx.save()
+        ctx.set_source_rgba(0.04, 0.05, 0.08, 0.88)
+        ctx.rectangle(4, 4, 138, 48)
         ctx.fill()
 
         ctx.set_source_rgb(0.0, 0.9, 1.0)
@@ -557,9 +719,12 @@ class BuddyEngine:
         ctx.select_font_face("Monospace", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
         ctx.set_font_size(9)
         ctx.move_to(8, 16)
-        ctx.show_text(f"{self.character.skin_id.upper()} {self.current_fps:.0f}FPS")
+        ctx.show_text(f"{self.character.skin_id.upper()} {self.current_fps:.0f}FPS P:{len(self.particles.particles)}")
         ctx.move_to(8, 28)
-        ctx.show_text(f"{self.character.state}")
+        ctx.show_text(f"ST:{self.character.state}")
+        ctx.move_to(8, 40)
+        ctx.set_source_rgb(1.0, 0.75, 0.2)
+        ctx.show_text(f"POMO:{self.pomodoro.state[:5]} {self.pomodoro.remaining_formatted}")
         ctx.restore()
 
     def on_button_press(self, widget: Gtk.Widget, event: Gdk.EventButton) -> bool:

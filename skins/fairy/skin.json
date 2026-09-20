@@ -1,0 +1,24 @@
+{
+  "id": "fairy",
+  "name": "Fairy",
+  "category": "fantasy",
+  "description": "Enchanting forest fairy with shimmering gossamer wings, healing stardust glows, and sparkling starburst trails.",
+  "canFly": true,
+  "speed": 1.2,
+  "personality": {
+    "energy": 0.85,
+    "curiosity": 0.85,
+    "playfulness": 0.90,
+    "sleepiness": 0.25,
+    "interaction_rate": 0.85
+  },
+  "abilities": ["sparkle_trail", "healing_glow", "flutter_hover"],
+  "sounds": {
+    "magic": "magic.wav"
+  },
+  "pomodoro": {
+    "work": "flower_nap",
+    "break": "stardust_flutter",
+    "celebrate": "fairy_ring"
+  }
+}

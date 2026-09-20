@@ -279,6 +279,206 @@ class LightningBolt:
         ctx.restore()
 
 
+class HeartParticle:
+    """Floating gentle heart particle for pets, affection, and happiness."""
+
+    def __init__(self, x: float, y: float, size: float = 6.0, color: Tuple[float, float, float] = (1.0, 0.35, 0.65)):
+        self.x = float(x) + random.uniform(-4, 4)
+        self.y = float(y) + random.uniform(-4, 4)
+        self.base_x = self.x
+        self.vx = random.uniform(-0.5, 0.5)
+        self.vy = random.uniform(-1.5, -0.6)
+        self.life = 1.0
+        self.decay = random.uniform(0.02, 0.04)
+        self.size = size
+        self.color = color
+        self.wave = random.uniform(0, math.pi * 2)
+
+    def update(self) -> bool:
+        self.y += self.vy
+        self.wave += 0.1
+        self.x = self.base_x + math.sin(self.wave) * 4.0
+        self.life -= self.decay
+        return self.life > 0
+
+    def draw(self, ctx: cairo.Context) -> None:
+        alpha = max(0.0, min(1.0, self.life))
+        ctx.save()
+        r, g, b = self.color
+        ctx.set_source_rgba(r, g, b, alpha * 0.9)
+        s = self.size * max(0.2, self.life)
+        # Draw small vector heart
+        ctx.save()
+        ctx.translate(self.x, self.y)
+        ctx.scale(s / 10.0, s / 10.0)
+        ctx.new_path()
+        ctx.move_to(0, 3)
+        ctx.curve_to(-6, -4, -10, 2, 0, 10)
+        ctx.curve_to(10, 2, 6, -4, 0, 3)
+        ctx.close_path()
+        ctx.fill()
+        ctx.restore()
+        ctx.restore()
+
+
+class StarParticle:
+    """Twinkling 4-point star for magic, wonder, and celebrations."""
+
+    def __init__(self, x: float, y: float, size: float = 7.0, color: Tuple[float, float, float] = MAGIC_GOLD):
+        self.x = float(x) + random.uniform(-6, 6)
+        self.y = float(y) + random.uniform(-6, 6)
+        angle = random.uniform(0, math.pi * 2)
+        spd = random.uniform(0.8, 3.5)
+        self.vx = math.cos(angle) * spd
+        self.vy = math.sin(angle) * spd
+        self.life = 1.0
+        self.decay = random.uniform(0.03, 0.06)
+        self.size = size
+        self.color = color
+        self.rot = random.uniform(0, math.pi)
+
+    def update(self) -> bool:
+        self.x += self.vx
+        self.y += self.vy
+        self.vx *= 0.94
+        self.vy *= 0.94
+        self.rot += 0.12
+        self.life -= self.decay
+        return self.life > 0
+
+    def draw(self, ctx: cairo.Context) -> None:
+        alpha = max(0.0, min(1.0, self.life))
+        ctx.save()
+        r, g, b = self.color
+        ctx.translate(self.x, self.y)
+        ctx.rotate(self.rot)
+        ctx.set_source_rgba(r, g, b, alpha)
+        s = self.size * self.life
+        # 4-point diamond star
+        ctx.new_path()
+        ctx.move_to(0, -s)
+        ctx.curve_to(0, 0, 0, 0, s * 0.25, -s * 0.25)
+        ctx.curve_to(0, 0, 0, 0, s, 0)
+        ctx.curve_to(0, 0, 0, 0, s * 0.25, s * 0.25)
+        ctx.curve_to(0, 0, 0, 0, 0, s)
+        ctx.curve_to(0, 0, 0, 0, -s * 0.25, s * 0.25)
+        ctx.curve_to(0, 0, 0, 0, -s, 0)
+        ctx.curve_to(0, 0, 0, 0, -s * 0.25, -s * 0.25)
+        ctx.close_path()
+        ctx.fill()
+        ctx.restore()
+
+
+class ConfettiParticle:
+    """Tumbling festive confetti for Pomodoro milestones and achievements."""
+
+    def __init__(self, x: float, y: float):
+        self.x = float(x) + random.uniform(-10, 10)
+        self.y = float(y) + random.uniform(-8, 8)
+        self.vx = random.uniform(-4.0, 4.0)
+        self.vy = random.uniform(-6.0, -1.0)
+        self.life = 1.0
+        self.decay = random.uniform(0.02, 0.04)
+        self.w = random.uniform(4.0, 7.0)
+        self.h = random.uniform(3.0, 5.0)
+        colors = [
+            (1.0, 0.2, 0.3), (0.2, 0.8, 0.3), (0.2, 0.5, 1.0),
+            (1.0, 0.85, 0.1), (0.9, 0.3, 0.9), (0.1, 0.9, 0.9)
+        ]
+        self.color = random.choice(colors)
+        self.flip_angle = random.uniform(0, math.pi)
+        self.flip_speed = random.uniform(0.1, 0.25)
+
+    def update(self) -> bool:
+        self.x += self.vx
+        self.y += self.vy
+        self.vy += 0.2  # Gravity
+        self.vx *= 0.96
+        self.flip_angle += self.flip_speed
+        self.life -= self.decay
+        return self.life > 0
+
+    def draw(self, ctx: cairo.Context) -> None:
+        alpha = max(0.0, min(1.0, self.life))
+        ctx.save()
+        r, g, b = self.color
+        ctx.set_source_rgba(r, g, b, alpha)
+        ctx.translate(self.x, self.y)
+        scale_y = math.cos(self.flip_angle)
+        ctx.scale(1.0, scale_y)
+        ctx.rectangle(-self.w / 2, -self.h / 2, self.w, self.h)
+        ctx.fill()
+        ctx.restore()
+
+
+class DustParticle:
+    """Subtle ground dust particle kick for steps, landings, and sprints."""
+
+    def __init__(self, x: float, y: float):
+        self.x = float(x) + random.uniform(-4, 4)
+        self.y = float(y) + random.uniform(-2, 2)
+        self.vx = random.uniform(-1.0, 1.0)
+        self.vy = random.uniform(-0.8, -0.2)
+        self.life = 1.0
+        self.decay = random.uniform(0.06, 0.12)
+        self.size = random.uniform(2.0, 4.0)
+
+    def update(self) -> bool:
+        self.x += self.vx
+        self.y += self.vy
+        self.size += 0.15
+        self.life -= self.decay
+        return self.life > 0
+
+    def draw(self, ctx: cairo.Context) -> None:
+        alpha = max(0.0, min(1.0, self.life * 0.4))
+        ctx.save()
+        ctx.set_source_rgba(0.7, 0.7, 0.65, alpha)
+        ctx.arc(self.x, self.y, self.size, 0, math.pi * 2)
+        ctx.fill()
+        ctx.restore()
+
+
+class EnergyOrbParticle:
+    """Glowing energy orb that floats with ethereal aura (Robots, Wizards, Aliens)."""
+
+    def __init__(self, x: float, y: float, color: Tuple[float, float, float] = CYAN_GLOW, radius: float = 8.0):
+        self.x = float(x)
+        self.y = float(y)
+        self.vx = random.uniform(-1.5, 1.5)
+        self.vy = random.uniform(-2.0, 0.5)
+        self.life = 1.0
+        self.decay = random.uniform(0.025, 0.05)
+        self.radius = radius
+        self.color = color
+
+    def update(self) -> bool:
+        self.x += self.vx
+        self.y += self.vy
+        self.vx *= 0.95
+        self.vy *= 0.95
+        self.life -= self.decay
+        return self.life > 0
+
+    def draw(self, ctx: cairo.Context) -> None:
+        alpha = max(0.0, min(1.0, self.life))
+        ctx.save()
+        r, g, b = self.color
+        # Outer glow
+        ctx.set_source_rgba(r, g, b, alpha * 0.35)
+        ctx.arc(self.x, self.y, self.radius * 1.8, 0, math.pi * 2)
+        ctx.fill()
+        # Mid core
+        ctx.set_source_rgba(r, g, b, alpha * 0.8)
+        ctx.arc(self.x, self.y, self.radius, 0, math.pi * 2)
+        ctx.fill()
+        # White center
+        ctx.set_source_rgba(1.0, 1.0, 1.0, alpha)
+        ctx.arc(self.x, self.y, self.radius * 0.45, 0, math.pi * 2)
+        ctx.fill()
+        ctx.restore()
+
+
 class ParticleManager:
     """Coordinates simulation and drawing of all active particles and effects."""
 
@@ -289,12 +489,26 @@ class ParticleManager:
         self.smoke: List[SmokeParticle] = []
         self.shockwaves: List[Shockwave] = []
         self.bolts: List[LightningBolt] = []
+        self.hearts: List[HeartParticle] = []
+        self.stars: List[StarParticle] = []
+        self.confetti: List[ConfettiParticle] = []
+        self.dust: List[DustParticle] = []
+        self.orbs: List[EnergyOrbParticle] = []
         self.enabled: bool = True
 
     @property
     def particles(self) -> List[Any]:
         """Aggregate list of all active particulate entities."""
-        return list(self.sparks) + list(self.flames) + list(self.smoke)
+        return (
+            list(self.sparks)
+            + list(self.flames)
+            + list(self.smoke)
+            + list(self.hearts)
+            + list(self.stars)
+            + list(self.confetti)
+            + list(self.dust)
+            + list(self.orbs)
+        )
 
     def clear(self) -> None:
         """Clear all active particles."""
@@ -303,6 +517,11 @@ class ParticleManager:
         self.smoke.clear()
         self.shockwaves.clear()
         self.bolts.clear()
+        self.hearts.clear()
+        self.stars.clear()
+        self.confetti.clear()
+        self.dust.clear()
+        self.orbs.clear()
 
     def burst_sparks(
         self,
@@ -319,6 +538,72 @@ class ParticleManager:
             if len(self.sparks) >= self.max_particles:
                 break
             self.sparks.append(Spark(x, y, color=color, size=size))
+
+    def burst_hearts(
+        self,
+        x: float,
+        y: float,
+        count: int = 4,
+        color: Tuple[float, float, float] = (1.0, 0.35, 0.65),
+        size: float = 6.0
+    ) -> None:
+        """Spawn gentle floating hearts (for love, petting, and happiness)."""
+        if not self.enabled:
+            return
+        for _ in range(count):
+            if len(self.hearts) >= self.max_particles:
+                break
+            self.hearts.append(HeartParticle(x, y, size=size, color=color))
+
+    def burst_stars(
+        self,
+        x: float,
+        y: float,
+        count: int = 6,
+        color: Tuple[float, float, float] = MAGIC_GOLD,
+        size: float = 7.0
+    ) -> None:
+        """Spawn twinkling magical stars."""
+        if not self.enabled:
+            return
+        for _ in range(count):
+            if len(self.stars) >= self.max_particles:
+                break
+            self.stars.append(StarParticle(x, y, size=size, color=color))
+
+    def burst_confetti(self, x: float, y: float, count: int = 15) -> None:
+        """Spawn celebratory tumbling confetti for Pomodoro milestones."""
+        if not self.enabled:
+            return
+        for _ in range(count):
+            if len(self.confetti) >= self.max_particles:
+                break
+            self.confetti.append(ConfettiParticle(x, y))
+
+    def burst_dust(self, x: float, y: float, count: int = 3) -> None:
+        """Spawn subtle footsteps / landing dust puffs."""
+        if not self.enabled:
+            return
+        for _ in range(count):
+            if len(self.dust) >= self.max_particles:
+                break
+            self.dust.append(DustParticle(x, y))
+
+    def energy_orbs(
+        self,
+        x: float,
+        y: float,
+        count: int = 2,
+        color: Tuple[float, float, float] = CYAN_GLOW,
+        radius: float = 8.0
+    ) -> None:
+        """Spawn glowing energy orbs for sci-fi or magic abilities."""
+        if not self.enabled:
+            return
+        for _ in range(count):
+            if len(self.orbs) >= self.max_particles:
+                break
+            self.orbs.append(EnergyOrbParticle(x, y, color=color, radius=radius))
 
     def sky_strike(self, target_x: float, target_y: float, color: Tuple[float, float, float] = CYAN_GLOW) -> None:
         """Create a monumental lightning bolt striking from the top of the monitor."""
@@ -392,13 +677,20 @@ class ParticleManager:
             self.shockwaves = [sw for sw in self.shockwaves if sw.update()]
         if self.bolts:
             self.bolts = [b for b in self.bolts if b.update()]
+        if self.dust:
+            self.dust = [d for d in self.dust if d.update()]
+        if self.confetti:
+            self.confetti = [c for c in self.confetti if c.update()]
+        if self.hearts:
+            self.hearts = [h for h in self.hearts if h.update()]
+        if self.stars:
+            self.stars = [st for st in self.stars if st.update()]
+        if self.orbs:
+            self.orbs = [o for o in self.orbs if o.update()]
 
     def draw(self, ctx: cairo.Context) -> None:
         """Render all active particles in layered order."""
         if not self.enabled:
-            return
-
-        if not (self.shockwaves or self.bolts or self.smoke or self.flames or self.sparks):
             return
 
         # 1. Background shockwaves
@@ -409,14 +701,26 @@ class ParticleManager:
         for b in self.bolts:
             b.draw(ctx)
 
-        # 3. Smoke puffs
+        # 3. Smoke puffs & dust
         for sm in self.smoke:
             sm.draw(ctx)
+        for d in self.dust:
+            d.draw(ctx)
 
         # 4. Flames
         for f in self.flames:
             f.draw(ctx)
 
-        # 5. Foreground sparks
+        # 5. Energy Orbs
+        for o in self.orbs:
+            o.draw(ctx)
+
+        # 6. Foreground sparks, stars, hearts, confetti
         for s in self.sparks:
             s.draw(ctx)
+        for st in self.stars:
+            st.draw(ctx)
+        for h in self.hearts:
+            h.draw(ctx)
+        for c in self.confetti:
+            c.draw(ctx)

@@ -1,0 +1,25 @@
+{
+  "id": "alien",
+  "name": "Alien",
+  "category": "sci-fi",
+  "description": "Cosmic extraterrestrial flying in a glowing saucer with tractor beams, antigravity pulses, and warp teleports.",
+  "canFly": true,
+  "speed": 1.2,
+  "personality": {
+    "energy": 0.75,
+    "curiosity": 0.95,
+    "playfulness": 0.60,
+    "sleepiness": 0.20,
+    "interaction_rate": 0.80
+  },
+  "abilities": ["ufo_beam", "cosmic_teleport", "antigravity_pulse"],
+  "sounds": {
+    "laser": "laser.wav",
+    "teleport": "teleport.wav"
+  },
+  "pomodoro": {
+    "work": "mothership_transmission",
+    "break": "crop_circle_spin",
+    "celebrate": "galactic_parade"
+  }
+}

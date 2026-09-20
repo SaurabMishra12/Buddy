@@ -25,6 +25,16 @@ class CharacterState:
     SIT = "SIT"
     INTERACT = "INTERACT"
     VICTORY = "VICTORY"
+    # Buddy 2.0 states
+    CURIOUS = "CURIOUS"
+    PLAY = "PLAY"
+    FOLLOW_CURSOR = "FOLLOW_CURSOR"
+    CELEBRATE = "CELEBRATE"
+    FOCUS = "FOCUS"
+    BREAK = "BREAK"
+    TIRED = "TIRED"
+    CONFUSED = "CONFUSED"
+    EXCITED = "EXCITED"
 
 
 class BaseProjectile:
@@ -65,7 +75,13 @@ class BaseCharacter:
         self.hitbox_radius = 35.0
         self.ability_cooldown = 0.0
         self.next_action_time = 0.0
-        self.state_timer = 0.0
+        from behavior.personality import CharacterPersonality
+        from behavior.memory import CharacterMemory
+        from behavior.state_machine import CharacterBehavior
+
+        self.personality = CharacterPersonality.preset("heroic" if skin_id in ["thor", "ironman", "captain_america", "batman", "superman", "spiderman"] else ("playful" if skin_id in ["cat", "dog"] else "energetic"))
+        self.memory = CharacterMemory(skin_id=skin_id)
+        self.behavior = CharacterBehavior(skin_id, personality=self.personality, memory=self.memory, can_fly=self.can_fly)
 
     def get_hitbox(self) -> Tuple[float, float, float]:
         """Returns (center_x, center_y, radius) in world coordinates."""

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Buddy — Modern Extensible Linux Desktop Companion
+Buddy 2.0 — Modern Extensible Linux Desktop Companion & Productivity Assistant
 Targeted for Fedora Linux, GNOME, KDE, Wayland, and X11.
 """
 
@@ -23,10 +23,11 @@ os.environ["PYTHONUNBUFFERED"] = "1"
 
 from core.config import config, CACHE_DIR
 from skins.manager import skin_manager
+from pomodoro.statistics import PomodoroStats
 
 SOCKET_FILE = CACHE_DIR / "buddy.sock"
 PID_FILE = CACHE_DIR / "buddy.pid"
-VERSION = "1.0.0"
+VERSION = "2.0.0"
 
 
 def send_daemon_command(cmd: dict) -> bool:
@@ -40,7 +41,6 @@ def send_daemon_command(cmd: dict) -> bool:
         client.close()
         return True
     except Exception:
-        # Stale socket
         if SOCKET_FILE.exists():
             SOCKET_FILE.unlink()
         return False
@@ -81,9 +81,26 @@ def start_ipc_server(engine):
                     elif action == "settings":
                         from ui.settings_dialog import show_settings_dialog
                         show_settings_dialog(engine)
-                    elif action == "skins":
+                    elif action in ("skins", "skin_gallery"):
                         from ui.skin_selector import show_skin_selector
                         show_skin_selector(engine)
+                    elif action == "stats":
+                        from ui.stats_dialog import show_stats_dialog
+                        show_stats_dialog(engine)
+                    elif action == "pomodoro":
+                        sub = msg.get("sub", "start")
+                        pomo = getattr(engine, "pomodoro", None)
+                        if pomo:
+                            if sub == "start":
+                                pomo.start_work()
+                            elif sub == "pause":
+                                pomo.pause()
+                            elif sub == "resume":
+                                pomo.resume()
+                            elif sub == "reset":
+                                pomo.reset()
+                            elif sub == "skip":
+                                pomo.skip()
                     elif action == "quit":
                         import gi
                         gi.require_version("Gtk", "3.0")
@@ -100,29 +117,57 @@ def start_ipc_server(engine):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Buddy — Your Linux Desktop Companion")
-    parser.add_argument("--skin", type=str, help="Launch or switch to specified skin (e.g. thor, dragon, cat, dog, hulk, ironman, harry_potter, captain_america, thanos, batman, superman)")
-    parser.add_argument("--pause", action="store_true", help="Pause running Buddy pet")
-    parser.add_argument("--resume", action="store_true", help="Resume running Buddy pet")
-    parser.add_argument("--settings", action="store_true", help="Open Buddy settings dialog")
-    parser.add_argument("--skins", action="store_true", help="Open Buddy character skin gallery")
-    parser.add_argument("--list-skins", action="store_true", help="List all available skins to terminal")
+    parser = argparse.ArgumentParser(description="Buddy 2.0 — Your Linux Desktop Companion & Productivity Assistant")
+    parser.add_argument("--skin", type=str, help="Launch or switch to specified skin (e.g. thor, dragon, cat, dog, slime, fox, ninja, space_robot...)")
+    parser.add_argument("--pause", action="store_true", help="Pause running Buddy companion")
+    parser.add_argument("--resume", action="store_true", help="Resume running Buddy companion")
+    parser.add_argument("--settings", action="store_true", help="Open Buddy multi-section settings dialog")
+    parser.add_argument("--skins", "--skin-gallery", action="store_true", dest="skins", help="Open Buddy visual character skin gallery")
+    parser.add_argument("--list-skins", action="store_true", help="List all 20+ available skins to terminal")
+    parser.add_argument("--pomodoro", nargs="?", const="start", choices=["start", "pause", "resume", "reset", "skip", "status"], help="Pomodoro productivity controls (start, pause, resume, reset, skip, status)")
+    parser.add_argument("--stats", action="store_true", help="Show productivity and focus session statistics")
     parser.add_argument("--debug", action="store_true", help="Launch with developer diagnostics overlay HUD")
     parser.add_argument("--version", action="store_true", help="Show Buddy version")
-    parser.add_argument("--quit", action="store_true", help="Quit running Buddy pet")
+    parser.add_argument("--quit", action="store_true", help="Quit running Buddy instance")
 
     args = parser.parse_args()
 
     if args.version:
-        print(f"Buddy Desktop Pet v{VERSION} (Linux/Fedora)")
+        print(f"Buddy Desktop Companion v{VERSION} (Linux/Fedora/GNOME/KDE)")
         return
 
     if args.list_skins:
-        print("Available Buddy Skins:")
+        print("⚡ Available Buddy 2.0 Characters:")
         for s in skin_manager.get_available_skins():
             flight = " [Can Fly]" if s.get("canFly") else ""
-            print(f"  • {s['id']:<16} - {s['name']}{flight}: {s['description']}")
+            cat = f"({s.get('category', 'general').capitalize()})"
+            print(f"  • {s['id']:<16} {cat:<10} - {s['name']}{flight}: {s['description']}")
         return
+
+    if args.stats:
+        stats = PomodoroStats()
+        summary = stats.get_summary()
+        today_mins = stats.sessions_today * 25.0
+        h = int(today_mins // 60)
+        m = int(today_mins % 60)
+        t_str = f"{h}h {m}m" if h > 0 else f"{m}m"
+        print("📊 Buddy 2.0 Productivity Statistics:")
+        print(f"  • Today's Focus:     {t_str}")
+        print(f"  • Sessions Today:    {stats.sessions_today}")
+        print(f"  • Sessions Week:     {stats.sessions_this_week}")
+        print(f"  • Current Streak:    {stats.streak_days} days")
+        print(f"  • Total Lifetime:    {summary['total_focus_hours']} hours")
+        if send_daemon_command({"action": "stats"}):
+            print("  (Opened visual statistics dashboard on desktop)")
+        return
+
+    if args.pomodoro:
+        sub = args.pomodoro
+        if send_daemon_command({"action": "pomodoro", "sub": sub}):
+            print(f"🍅 Sent Pomodoro command: {sub.upper()} to running Buddy.")
+            return
+        else:
+            print(f"No running Buddy instance found to execute Pomodoro '{sub}'. Launching Buddy with Pomodoro...")
 
     # Check for daemon commands
     if args.pause:
@@ -144,7 +189,6 @@ def main():
     if args.settings:
         if send_daemon_command({"action": "settings"}):
             return
-        # If not running, fall through and run with settings
 
     if args.skins:
         if send_daemon_command({"action": "skins"}):
@@ -165,7 +209,7 @@ def main():
         return
 
     # If already running without extra args, open skins gallery dialog
-    if not target_skin and not args.pause and not args.resume and not args.settings and not args.skins and not args.quit:
+    if not target_skin and not args.pause and not args.resume and not args.settings and not args.skins and not args.quit and not args.pomodoro:
         if send_daemon_command({"action": "skins"}):
             print("⚡ Buddy is already running on desktop! Opened Character Skin Gallery.")
             return
@@ -220,6 +264,9 @@ def main():
     engine = BuddyEngine(requested_skin=args.skin, debug_mode=args.debug)
     tray = BuddyTray(engine)
     start_ipc_server(engine)
+
+    if args.pomodoro == "start":
+        engine.pomodoro.start_work()
 
     print(f"⚡ Buddy Desktop Companion v{VERSION} launched successfully on display!")
     print(f"Active Skin: {engine.character.skin_id.upper()}")

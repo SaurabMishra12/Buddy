@@ -1,0 +1,25 @@
+{
+  "id": "space_robot",
+  "name": "Space Robot",
+  "category": "sci-fi",
+  "description": "High-tech futuristic companion robot with boot thrusters, glowing visor display, and holographic scanning beams.",
+  "canFly": true,
+  "speed": 1.25,
+  "personality": {
+    "energy": 0.85,
+    "curiosity": 0.90,
+    "playfulness": 0.45,
+    "sleepiness": 0.15,
+    "interaction_rate": 0.80
+  },
+  "abilities": ["jet_boost", "hologram", "scanning_beam"],
+  "sounds": {
+    "jet": "jet.wav",
+    "laser": "laser.wav"
+  },
+  "pomodoro": {
+    "work": "standby_charging",
+    "break": "thruster_dance",
+    "celebrate": "hologram_party"
+  }
+}
