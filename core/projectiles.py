@@ -350,7 +350,15 @@ class DesktopProjectileWindow(Gtk.Window):
                             sag_r = r * 0.91
                             ctrl_x = math.cos(mid_ang) * sag_r
                             ctrl_y = math.sin(mid_ang) * sag_r
-                            ctx.quad_to(ctrl_x, ctrl_y, px, py)
+                            # Emulate quadratic Bézier via cubic curve_to:
+                            # CP1 = prev + 2/3*(ctrl - prev), CP2 = end + 2/3*(ctrl - end)
+                            prev_px = math.cos(prev_ang) * r
+                            prev_py = math.sin(prev_ang) * r
+                            cp1x = prev_px + (2.0 / 3.0) * (ctrl_x - prev_px)
+                            cp1y = prev_py + (2.0 / 3.0) * (ctrl_y - prev_py)
+                            cp2x = px + (2.0 / 3.0) * (ctrl_x - px)
+                            cp2y = py + (2.0 / 3.0) * (ctrl_y - py)
+                            ctx.curve_to(cp1x, cp1y, cp2x, cp2y, px, py)
                     ctx.close_path()
                     ctx.stroke()
 

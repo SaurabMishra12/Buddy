@@ -107,7 +107,7 @@ class BuddyTray:
         about.set_program_name("Buddy")
         about.set_version("1.0.0")
         about.set_comments("A modern, extensible Linux desktop pet application designed for Fedora Linux.")
-        about.set_website("https://github.com/buddy/buddy")
+        about.set_website("https://github.com/SaurabMishra12/Buddy")
         about.set_website_label("Buddy Desktop Companion")
         about.run()
         about.destroy()

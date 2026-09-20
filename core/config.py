@@ -65,15 +65,27 @@ class Config:
         """Load configuration from file or fallback to defaults."""
         if self.config_file.exists():
             try:
-                with open(self.config_file, "r", encoding="utf-8") as f:
-                    loaded = json.load(f)
-                    if isinstance(loaded, dict):
-                        # Merge loaded values over defaults
-                        for k, v in loaded.items():
-                            if k in self.data and isinstance(self.data[k], dict) and isinstance(v, dict):
-                                self.data[k].update(v)
-                            else:
-                                self.data[k] = v
+                raw = self.config_file.read_text(encoding="utf-8")
+                if not raw.strip():
+                    print("[Buddy Config] Warning: Config file is empty, using defaults.")
+                    return self.data
+                loaded = json.loads(raw)
+                if not isinstance(loaded, dict):
+                    raise ValueError(f"Expected dict at top level, got {type(loaded).__name__}")
+                # Merge loaded values over defaults
+                for k, v in loaded.items():
+                    if k in self.data and isinstance(self.data[k], dict) and isinstance(v, dict):
+                        self.data[k].update(v)
+                    else:
+                        self.data[k] = v
+            except (json.JSONDecodeError, ValueError) as e:
+                print(f"[Buddy Config] Error: Corrupt config file ({e}), backing up and using defaults.")
+                try:
+                    backup = self.config_file.with_suffix(".json.bak")
+                    self.config_file.rename(backup)
+                    print(f"[Buddy Config] Corrupt config backed up to: {backup}")
+                except OSError:
+                    pass
             except Exception as e:
                 print(f"[Buddy Config] Error reading config file, using defaults: {e}")
         return self.data

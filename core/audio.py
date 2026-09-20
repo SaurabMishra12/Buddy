@@ -2,6 +2,7 @@
 
 import os
 import queue
+import random
 import shutil
 import subprocess
 import threading
@@ -68,6 +69,9 @@ class SoundManager:
             self._create_tone_if_missing("grapple.wav", freq_start=600, freq_end=350, duration=0.2, noise=False)
             self._create_tone_if_missing("thwip.wav", freq_start=1400, freq_end=320, duration=0.15, noise=True)
             self._create_tone_if_missing("web.wav", freq_start=850, freq_end=220, duration=0.18, noise=False)
+            self._create_tone_if_missing("laser.wav", freq_start=1200, freq_end=600, duration=0.20, noise=False)
+            self._create_tone_if_missing("roar.wav", freq_start=120, freq_end=60, duration=0.45, noise=True)
+            self._create_tone_if_missing("swoosh.wav", freq_start=400, freq_end=100, duration=0.22, noise=True)
         except Exception as e:
             print(f"[Buddy Audio] Note: Could not create synthesized sound cache: {e}")
 
@@ -96,7 +100,6 @@ class SoundManager:
                 envelope = math.sin(math.pi * progress)  # Smooth fade-in & fade-out
                 signal = math.sin(2 * math.pi * freq * t)
                 if noise:
-                    import random
                     signal = 0.7 * signal + 0.3 * (random.random() * 2 - 1)
                 val = int(signal * envelope * 12000)
                 frames.extend(struct.pack("<h", max(-32767, min(32767, val))))

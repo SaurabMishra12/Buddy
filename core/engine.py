@@ -592,7 +592,7 @@ class BuddyEngine:
             self.drag_offset_x = event.x - self.window.half_size
             self.drag_offset_y = event.y - self.window.half_size
             skin = self.character.skin_id
-            if skin in ("superman", "thor", "ironman", "dragon", "harry_potter"):
+            if skin in ("superman", "thor", "ironman", "dragon", "harry_potter", "thanos"):
                 self.character.state = CharacterState.FLY
             elif skin == "hulk":
                 self.character.state = CharacterState.JUMP

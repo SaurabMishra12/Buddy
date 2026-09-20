@@ -75,7 +75,9 @@ def start_ipc_server(engine):
                     elif action == "toggle_pause":
                         engine.toggle_pause()
                     elif action == "switch_skin":
-                        engine.switch_skin(msg.get("skin_id"))
+                        skin_id = msg.get("skin_id")
+                        if skin_id:
+                            engine.switch_skin(skin_id)
                     elif action == "settings":
                         from ui.settings_dialog import show_settings_dialog
                         show_settings_dialog(engine)
@@ -184,18 +186,22 @@ def main():
     if hasattr(signal, "SIGHUP"):
         signal.signal(signal.SIGHUP, signal.SIG_IGN)
 
-    def signal_handler(sig, frame):
-        print("\nBuddy says goodbye! Exiting gracefully...", flush=True)
-        if SOCKET_FILE.exists():
+    def _cleanup_files():
+        for f in (SOCKET_FILE, PID_FILE):
             try:
-                SOCKET_FILE.unlink()
+                if f.exists():
+                    f.unlink()
             except Exception:
                 pass
+
+    def signal_handler(sig, frame):
+        print("\nBuddy says goodbye! Exiting gracefully...", flush=True)
+        _cleanup_files()
         import gi
         gi.require_version("Gtk", "3.0")
         from gi.repository import Gtk
-        Gtk.main_quit()
-        sys.exit(0)
+        if Gtk.main_level() > 0:
+            Gtk.main_quit()
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
@@ -220,6 +226,9 @@ def main():
     print("Press Ctrl+C in terminal or right-click pet / tray icon to configure or quit.")
 
     engine.run()
+
+    # Clean up on normal exit
+    _cleanup_files()
 
 
 if __name__ == "__main__":
