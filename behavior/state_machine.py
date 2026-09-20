@@ -226,7 +226,8 @@ class CharacterBehavior:
                 self.transition_to(BehaviorState.FLY)
             else:
                 self.target_x = random.uniform(min_x + 90.0, min_x + screen_w - 90.0)
-                self.target_y = ground_y
+                # Roam naturally in 2D around current area or desktop floor
+                self.target_y = max(min_y + 80.0, min(ground_y, char_y + random.uniform(-150.0, 150.0)))
                 # High energy might run, moderate energy walks
                 if self.personality.energy > 0.75 and random.random() < 0.4:
                     self.transition_to(BehaviorState.RUN)

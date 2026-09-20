@@ -415,7 +415,9 @@ class BuddyEngine:
                 dy = target_y - self.character.y
                 dist = math.hypot(dx, dy)
 
-                if skin in ("superman", "thor", "ironman", "dragon", "harry_potter", "thanos"):
+                is_flyer = meta.get("canFly", False) or getattr(self.character, "can_fly", False) or skin in ("superman", "thor", "ironman", "dragon", "harry_potter", "thanos")
+
+                if is_flyer:
                     # FLYERS: Critically damped spring-damper flight towards mouse destination
                     if dist > 12.0:
                         self.character.facing_right = (dx >= 0.0)
@@ -434,12 +436,29 @@ class BuddyEngine:
                         self.character.x += self.character.vx
                         self.character.y += self.character.vy
 
-                        # Hero-specific banking tilt and flight propulsion trails
+                        # Hero/Companion banking tilt and flight propulsion trails
+                        target_tilt = (self.character.vx / 15.0) * 0.22
+                        self.character.tilt += (target_tilt - self.character.tilt) * 0.16
+
                         if skin == "ironman":
-                            target_tilt = (self.character.vx / 15.0) * 0.28
-                            self.character.tilt += (target_tilt - self.character.tilt) * 0.16
                             self.particles.burst_sparks(self.character.x, self.character.y + 16, count=2, color=(1.0, 0.5, 0.1))
                             self.particles.burst_sparks(self.character.x - (8 if self.character.facing_right else -8), self.character.y + 18, count=1, color=CYAN_GLOW)
+                        elif skin == "space_robot":
+                            self.particles.burst_sparks(self.character.x, self.character.y + 18, count=2, color=(0.1, 0.9, 1.0))
+                        elif skin == "fairy":
+                            self.particles.burst_stars(self.character.x, self.character.y + 8, count=2, color=(1.0, 0.9, 0.4))
+                        elif skin == "alien":
+                            if random.random() < 0.4:
+                                self.particles.burst_stars(self.character.x, self.character.y + 10, count=1, color=(0.2, 1.0, 0.5))
+                        elif skin == "ghost":
+                            if random.random() < 0.3:
+                                self.particles.burst_stars(self.character.x, self.character.y + 10, count=1, color=(0.7, 0.9, 1.0))
+                        elif skin == "vampire":
+                            if random.random() < 0.3:
+                                self.particles.smoke_puff(self.character.x, self.character.y + 10, count=1, color=(0.2, 0.05, 0.15))
+                        elif skin == "pixel_wizard":
+                            if random.random() < 0.35:
+                                self.particles.burst_stars(self.character.x, self.character.y + 8, count=1, color=(0.8, 0.4, 1.0))
                         elif skin == "superman":
                             target_tilt = (self.character.vx / 15.0) * 0.24
                             self.character.tilt += (target_tilt - self.character.tilt) * 0.18
@@ -529,42 +548,30 @@ class BuddyEngine:
                             self.audio.play("smash")
 
                 else:
-                    # RUNNERS (Captain America, Cat, Dog, Batman):
-                    # Fluid sprint with spring-damper stride along ground
-                    dist_x = abs(dx)
+                    # RUNNERS & GROUND COMPANIONS (Cat, Dog, Ninja, Penguin, Fox, Slime, Captain America, Batman):
                     self.character.facing_right = (dx >= 0.0)
 
-                    if dist_x > 18.0:
-                        self.character.state = CharacterState.RUN
-                        run_spd = min(13.0, max(2.5, dist_x * 0.095))
-                        target_vx = (1.0 if dx > 0 else -1.0) * run_spd
-                        # Smooth acceleration stride
-                        self.character.vx += (target_vx - self.character.vx) * 0.24
+                    if dist > 12.0:
+                        follow_spd = min(14.0, max(2.5, dist * 0.10))
+                        target_vx = (dx / dist) * follow_spd
+                        target_vy = (dy / dist) * follow_spd
+                        self.character.vx += (target_vx - self.character.vx) * 0.25
+                        self.character.vy += (target_vy - self.character.vy) * 0.25
                         self.character.x += self.character.vx
-                        if random.random() < 0.25:
-                            self.particles.smoke_puff(self.character.x, ground_y + 20, count=1)
+                        self.character.y += self.character.vy
+                        self.character.state = CharacterState.RUN
+                        if random.random() < 0.2:
+                            self.particles.burst_dust(self.character.x, self.character.y + 15, count=1)
                     else:
                         self.character.state = CharacterState.IDLE
-                        self.character.vx *= 0.80
+                        self.character.vx *= 0.8
+                        self.character.vy *= 0.8
                         self.character.x += self.character.vx
-
-                    # If mouse is pulled high into the air, runner can jump / reach up!
-                    if target_y < ground_y - 60.0:
-                        if self.character.y >= ground_y - 2.0 and dist_x < 60.0:
-                            self.character.vy = -12.0
-                            self.character.state = CharacterState.JUMP
-                        elif self.character.y < ground_y:
-                            self.character.vy += 0.8
-                            self.character.y += self.character.vy
-                            if self.character.y >= ground_y:
-                                self.character.y = ground_y
-                                self.character.vy = 0.0
-                    else:
-                        self.character.y = ground_y
+                        self.character.y += self.character.vy
 
                 # Screen boundary clamp
                 self.character.x = max(min_x + 50.0, min(min_x + screen_w - 50.0, self.character.x))
-                self.character.y = max(min_y + 50.0, min(ground_y if not meta.get("canFly", False) else min_y + screen_h - 50.0, self.character.y))
+                self.character.y = max(min_y + 50.0, min(min_y + screen_h - 50.0, self.character.y))
 
             else:
                 # Normal peaceful behavior when not dragging:

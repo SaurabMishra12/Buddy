@@ -414,7 +414,7 @@ class ConfettiParticle:
 class DustParticle:
     """Subtle ground dust particle kick for steps, landings, and sprints."""
 
-    def __init__(self, x: float, y: float):
+    def __init__(self, x: float, y: float, color: Tuple[float, float, float] = (0.7, 0.7, 0.65)):
         self.x = float(x) + random.uniform(-4, 4)
         self.y = float(y) + random.uniform(-2, 2)
         self.vx = random.uniform(-1.0, 1.0)
@@ -422,6 +422,7 @@ class DustParticle:
         self.life = 1.0
         self.decay = random.uniform(0.06, 0.12)
         self.size = random.uniform(2.0, 4.0)
+        self.color = color
 
     def update(self) -> bool:
         self.x += self.vx
@@ -433,7 +434,8 @@ class DustParticle:
     def draw(self, ctx: cairo.Context) -> None:
         alpha = max(0.0, min(1.0, self.life * 0.4))
         ctx.save()
-        ctx.set_source_rgba(0.7, 0.7, 0.65, alpha)
+        r, g, b = self.color
+        ctx.set_source_rgba(r, g, b, alpha)
         ctx.arc(self.x, self.y, self.size, 0, math.pi * 2)
         ctx.fill()
         ctx.restore()
@@ -580,14 +582,20 @@ class ParticleManager:
                 break
             self.confetti.append(ConfettiParticle(x, y))
 
-    def burst_dust(self, x: float, y: float, count: int = 3) -> None:
+    def burst_dust(
+        self,
+        x: float,
+        y: float,
+        count: int = 3,
+        color: Tuple[float, float, float] = (0.7, 0.7, 0.65)
+    ) -> None:
         """Spawn subtle footsteps / landing dust puffs."""
         if not self.enabled:
             return
         for _ in range(count):
             if len(self.dust) >= self.max_particles:
                 break
-            self.dust.append(DustParticle(x, y))
+            self.dust.append(DustParticle(x, y, color=color))
 
     def energy_orbs(
         self,
@@ -604,6 +612,17 @@ class ParticleManager:
             if len(self.orbs) >= self.max_particles:
                 break
             self.orbs.append(EnergyOrbParticle(x, y, color=color, radius=radius))
+
+    def burst_energy_orbs(
+        self,
+        x: float,
+        y: float,
+        count: int = 2,
+        color: Tuple[float, float, float] = CYAN_GLOW,
+        radius: float = 8.0
+    ) -> None:
+        """Alias for energy_orbs."""
+        self.energy_orbs(x, y, count=count, color=color, radius=radius)
 
     def sky_strike(self, target_x: float, target_y: float, color: Tuple[float, float, float] = CYAN_GLOW) -> None:
         """Create a monumental lightning bolt striking from the top of the monitor."""
