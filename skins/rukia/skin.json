@@ -1,0 +1,15 @@
+{
+  "id": "rukia",
+  "name": "Rukia Kuchiki",
+  "description": "Soul Reaper wielding the pure white snow blade Sode no Shirayuki and Hakka no Togame.",
+  "speed": 1.15,
+  "canFly": false,
+  "abilities": [
+    "sode_no_shirayuki",
+    "tsukishiro",
+    "hakka_no_togame",
+    "draw_chappy",
+    "ribbon_twirl"
+  ],
+  "category": "bleach"
+}

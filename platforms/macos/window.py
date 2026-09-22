@@ -96,12 +96,19 @@ class WebRopeView(AppKit.NSView):
             self._owner.render_cairo_to_view(rect)
 
 
-class BuddyNSWindow(AppKit.NSWindow):
+class BuddyNSPanel(AppKit.NSPanel):
+    """Non-activating floating panel: never steals focus from active apps and never drops behind."""
     def canBecomeKeyWindow(self):
-        return True
+        return False
+
+    def canBecomeMainWindow(self):
+        return False
 
     def destroy(self):
         self.close()
+
+
+BuddyNSWindow = BuddyNSPanel
 
 
 class BuddyOverlayView(AppKit.NSView):
@@ -708,16 +715,21 @@ class MacOSOverlayWindow(PlatformWindow):
         self.color_space = CGColorSpaceCreateDeviceRGB()
 
         init_frame = NSRect(NSPoint(200, 200), NSSize(self.win_size, self.win_size))
-        self.window = BuddyNSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+        panel_style = (
+            AppKit.NSWindowStyleMaskBorderless |
+            AppKit.NSWindowStyleMaskNonactivatingPanel
+        )
+        self.window = BuddyNSPanel.alloc().initWithContentRect_styleMask_backing_defer_(
             init_frame,
-            AppKit.NSWindowStyleMaskBorderless,
+            panel_style,
             AppKit.NSBackingStoreBuffered,
             False
         )
         self.window.setOpaque_(False)
         self.window.setBackgroundColor_(AppKit.NSColor.clearColor())
         self.window.setHasShadow_(False)
-        self.window.setLevel_(AppKit.NSFloatingWindowLevel)
+        self.window.setLevel_(AppKit.NSStatusWindowLevel)
+        self.window.setHidesOnDeactivate_(False)
         self.window.setCollectionBehavior_(
             AppKit.NSWindowCollectionBehaviorCanJoinAllSpaces |
             AppKit.NSWindowCollectionBehaviorStationary |

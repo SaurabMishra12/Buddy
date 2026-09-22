@@ -1,0 +1,15 @@
+{
+  "id": "ichigo",
+  "name": "Ichigo Kurosaki",
+  "description": "Substitute Soul Reaper wielding Zangetsu with Getsuga Tenshō and Tensa Zangetsu Bankai.",
+  "speed": 1.25,
+  "canFly": false,
+  "abilities": [
+    "getsuga_tensho",
+    "bankai",
+    "shunpo",
+    "check_phone",
+    "cross_legged_rest"
+  ],
+  "category": "bleach"
+}

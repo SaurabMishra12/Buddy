@@ -1,0 +1,15 @@
+{
+  "id": "byakuya",
+  "name": "Byakuya Kuchiki",
+  "description": "Captain of the 6th Division wielding Senbonzakura, Senkei, and Shūkei Hakuteiken.",
+  "speed": 1.15,
+  "canFly": false,
+  "abilities": [
+    "senbonzakura",
+    "senkei",
+    "hakuteiken",
+    "adjust_scarf",
+    "meditate"
+  ],
+  "category": "bleach"
+}

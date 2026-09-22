@@ -43,15 +43,30 @@ def show_macos_context_menu(engine: Any, event: Any) -> None:
     sig_item.setTarget_(ctrl)
     menu.addItem_(sig_item)
 
-    next_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-        "➡️ Next Companion (Scroll Wheel)", "onNextSkin:", ""
+    # 2. Companion Behavior Mode Submenu
+    cur_mode = getattr(engine, "mode", "static")
+    mode_sub = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        f"🧭 Behavior Mode ({cur_mode.capitalize()})", None, ""
     )
-    next_item.setTarget_(ctrl)
-    menu.addItem_(next_item)
+    b_menu = AppKit.NSMenu.alloc().init()
+    b_menu.setAutoenablesItems_(False)
+    for label, m in [
+        ("📌 Desk Pet (Static — Stays Where Dropped)", "static"),
+        ("🐾 Free Roam (Wanders Desktop Autonomously)", "roam"),
+        ("⚡ Cursor Companion (Follows Cursor)", "follow"),
+    ]:
+        m_it = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(label, "onSetCompanionMode:", "")
+        m_it.setTarget_(ctrl)
+        m_it.setRepresentedObject_(m)
+        if cur_mode == m:
+            m_it.setState_(AppKit.NSControlStateValueOn)
+        b_menu.addItem_(m_it)
+    mode_sub.setSubmenu_(b_menu)
+    menu.addItem_(mode_sub)
 
     menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
-    # 2. Switch Skin Submenu
+    # 3. Switch Companion Submenu (Categorized by Universe)
     cur_id = engine.character.skin_id
     char_name = cur_id.replace("_", " ").title()
     skin_sub = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
@@ -59,15 +74,41 @@ def show_macos_context_menu(engine: Any, event: Any) -> None:
     )
     skin_menu = AppKit.NSMenu.alloc().init()
     skin_menu.setAutoenablesItems_(False)
+
+    categories_map = {
+        "bleach": ("⚔️ Bleach Soul Reapers", []),
+        "superhero": ("🦸 Superheroes", []),
+        "animals": ("🐾 Pets & Animals", []),
+        "fantasy": ("🔮 Fantasy & Magic", []),
+        "sci-fi": ("🚀 Sci-Fi & Others", []),
+        "cute": ("✨ Cute Companions", []),
+    }
     for s in skin_manager.get_available_skins():
-        sid = s["id"]
-        s_name = s.get("name", sid)
-        it = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(s_name, "onSwitchSkin:", "")
-        it.setTarget_(ctrl)
-        it.setRepresentedObject_(sid)
-        if sid == cur_id:
-            it.setState_(AppKit.NSControlStateValueOn)
-        skin_menu.addItem_(it)
+        cat = s.get("category", "superhero").lower()
+        if cat in categories_map:
+            categories_map[cat][1].append(s)
+        else:
+            categories_map["sci-fi"][1].append(s)
+
+    for cat_key, (cat_label, cat_skins) in categories_map.items():
+        if not cat_skins:
+            continue
+        cat_sub_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(cat_label, None, "")
+        cat_menu = AppKit.NSMenu.alloc().init()
+        cat_menu.setAutoenablesItems_(False)
+        for s in cat_skins:
+            sid = s["id"]
+            s_name = s.get("name", sid)
+            flight = " ✈️" if s.get("canFly") else ""
+            it = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(f"{s_name}{flight}", "onSwitchSkin:", "")
+            it.setTarget_(ctrl)
+            it.setRepresentedObject_(sid)
+            if sid == cur_id:
+                it.setState_(AppKit.NSControlStateValueOn)
+            cat_menu.addItem_(it)
+        cat_sub_item.setSubmenu_(cat_menu)
+        skin_menu.addItem_(cat_sub_item)
+
     skin_sub.setSubmenu_(skin_menu)
     menu.addItem_(skin_sub)
 
@@ -354,7 +395,7 @@ def show_macos_skin_selector(engine: Any, parent=None) -> None:
     search_field.setAction_("onSearchChange:")
     backdrop.addSubview_(search_field)
 
-    categories = ["All", "Heroes", "Animals", "Fantasy", "Sci-Fi", "Cute"]
+    categories = ["All", "Bleach", "Heroes", "Animals", "Fantasy", "Sci-Fi", "Cute"]
     seg = AppKit.NSSegmentedControl.alloc().initWithFrame_(NSRect(NSPoint(268, win_h - 104), NSSize(win_w - 292, 28)))
     seg.setSegmentCount_(len(categories))
     seg.setSegmentStyle_(AppKit.NSSegmentStyleTexturedRounded)
@@ -376,7 +417,7 @@ def show_macos_skin_selector(engine: Any, parent=None) -> None:
     table_view = AppKit.NSTableView.alloc().initWithFrame_(scroll.contentView().bounds())
     col = AppKit.NSTableColumn.alloc().initWithIdentifier_("companion")
     col.setWidth_(table_w - 20)
-    col.setTitle_("Companions (22)")
+    col.setTitle_(f"Companions ({len(all_skins)})")
     table_view.addTableColumn_(col)
     table_view.setHeaderView_(None)
     table_view.setRowHeight_(30.0)
@@ -478,8 +519,12 @@ def show_macos_skin_selector(engine: Any, parent=None) -> None:
             s_desc = s.get("description", "").lower()
             s_abs = " ".join(s.get("abilities", [])).lower()
 
-            if cat_filter != "All" and s_cat != cat_filter:
-                continue
+            if cat_filter != "All":
+                if cat_filter == "Heroes":
+                    if s_cat != "Superhero":
+                        continue
+                elif s_cat != cat_filter:
+                    continue
             if query and (query not in s_name and query not in s_desc and query not in s_abs):
                 continue
             filtered.append(s)

@@ -1,0 +1,15 @@
+{
+  "id": "yamamoto",
+  "name": "Genryūsai Shigekuni Yamamoto",
+  "description": "Captain-Commander of the Gotei 13 wielding Ryūjin Jakka and Zanka no Tachi.",
+  "speed": 0.95,
+  "canFly": false,
+  "abilities": [
+    "ryujin_jakka",
+    "zanka_no_tachi",
+    "stroke_beard",
+    "flame_wave",
+    "meditate"
+  ],
+  "category": "bleach"
+}

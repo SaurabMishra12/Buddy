@@ -481,6 +481,258 @@ class EnergyOrbParticle:
         ctx.restore()
 
 
+class CherryPetalParticle:
+    """Delicate fluttering cherry blossom petal for Byakuya Kuchiki's Senbonzakura."""
+
+    def __init__(self, x: float, y: float, vx: Optional[float] = None, vy: Optional[float] = None):
+        self.x = float(x)
+        self.y = float(y)
+        angle = random.uniform(0, 2 * math.pi)
+        speed = random.uniform(2.0, 6.0)
+        self.vx = vx if vx is not None else math.cos(angle) * speed
+        self.vy = vy if vy is not None else math.sin(angle) * speed - 1.0
+        self.angle = random.uniform(0, 2 * math.pi)
+        self.rot_speed = random.uniform(-0.15, 0.15)
+        self.wave = random.uniform(0, 2 * math.pi)
+        self.wave_speed = random.uniform(0.08, 0.16)
+        self.size = random.uniform(4.5, 7.5)
+        self.life = 1.0
+        self.decay = random.uniform(0.015, 0.035)
+        # Petal color shades: soft pink to glowing magenta
+        shade = random.random()
+        if shade < 0.6:
+            self.color = (1.0, 0.68, 0.82)
+        elif shade < 0.85:
+            self.color = (1.0, 0.45, 0.72)
+        else:
+            self.color = (0.95, 0.85, 0.95)
+
+    def update(self) -> bool:
+        self.x += self.vx
+        self.y += self.vy
+        self.vx *= 0.94
+        self.vy = self.vy * 0.94 + 0.45  # Gentle downward drift
+        self.wave += self.wave_speed
+        self.x += math.sin(self.wave) * 0.8
+        self.angle += self.rot_speed
+        self.life -= self.decay
+        return self.life > 0
+
+    def draw(self, ctx: cairo.Context) -> None:
+        alpha = max(0.0, min(1.0, self.life))
+        ctx.save()
+        ctx.translate(self.x, self.y)
+        ctx.rotate(self.angle)
+        s = self.size
+        r, g, b = self.color
+
+        # Petal outer glow
+        ctx.set_source_rgba(r, g, b, alpha * 0.4)
+        ctx.arc(0, 0, s * 1.3, 0, math.pi * 2)
+        ctx.fill()
+
+        # Sakura petal contour with tip notch
+        ctx.set_source_rgba(r, g, b, alpha * 0.9)
+        ctx.new_path()
+        ctx.move_to(0, -s * 1.1)
+        ctx.curve_to(s * 0.75, -s * 0.6, s * 0.6, s * 0.8, 0, s)
+        ctx.curve_to(-s * 0.6, s * 0.8, -s * 0.75, -s * 0.6, 0, -s * 1.1)
+        ctx.fill()
+
+        # White highlight glint
+        ctx.set_source_rgba(1.0, 1.0, 1.0, alpha * 0.7)
+        ctx.new_path()
+        ctx.move_to(0, -s * 0.8)
+        ctx.curve_to(s * 0.25, -s * 0.3, s * 0.2, s * 0.4, 0, s * 0.6)
+        ctx.curve_to(-s * 0.2, s * 0.4, -s * 0.25, -s * 0.3, 0, -s * 0.8)
+        ctx.fill()
+
+        ctx.restore()
+
+
+class IceCrystalParticle:
+    """Shimmering hexagonal ice shard for Hitsugaya (Hyōrinmaru) and Rukia (Sode no Shirayuki)."""
+
+    def __init__(self, x: float, y: float, vx: Optional[float] = None, vy: Optional[float] = None, size: float = 6.0):
+        self.x = float(x)
+        self.y = float(y)
+        angle = random.uniform(0, 2 * math.pi)
+        speed = random.uniform(1.5, 5.0)
+        self.vx = vx if vx is not None else math.cos(angle) * speed
+        self.vy = vy if vy is not None else math.sin(angle) * speed
+        self.angle = random.uniform(0, 2 * math.pi)
+        self.rot_speed = random.uniform(-0.1, 0.1)
+        self.size = size
+        self.life = 1.0
+        self.decay = random.uniform(0.02, 0.045)
+        # Ice hues: crystalline cyan to glacial white
+        self.color = (0.45, 0.85, 1.0) if random.random() < 0.7 else (0.85, 0.95, 1.0)
+
+    def update(self) -> bool:
+        self.x += self.vx
+        self.y += self.vy
+        self.vx *= 0.93
+        self.vy *= 0.93
+        self.angle += self.rot_speed
+        self.life -= self.decay
+        return self.life > 0
+
+    def draw(self, ctx: cairo.Context) -> None:
+        alpha = max(0.0, min(1.0, self.life))
+        ctx.save()
+        ctx.translate(self.x, self.y)
+        ctx.rotate(self.angle)
+        s = self.size
+        r, g, b = self.color
+
+        # Outer frost glow
+        ctx.set_source_rgba(r, g, b, alpha * 0.45)
+        ctx.arc(0, 0, s * 1.5, 0, math.pi * 2)
+        ctx.fill()
+
+        # Diamond crystal facet
+        ctx.set_source_rgba(r, g, b, alpha * 0.9)
+        ctx.new_path()
+        ctx.move_to(0, -s)
+        ctx.line_to(s * 0.55, 0)
+        ctx.line_to(0, s)
+        ctx.line_to(-s * 0.55, 0)
+        ctx.close_path()
+        ctx.fill()
+
+        # Pure white center core facet
+        ctx.set_source_rgba(1.0, 1.0, 1.0, alpha * 0.95)
+        ctx.new_path()
+        ctx.move_to(0, -s * 0.55)
+        ctx.line_to(s * 0.25, 0)
+        ctx.line_to(0, s * 0.55)
+        ctx.line_to(-s * 0.25, 0)
+        ctx.close_path()
+        ctx.fill()
+
+        ctx.restore()
+
+
+class GetsugaSlashParticle:
+    """Devastating crescent energy wave for Ichigo Kurosaki's Getsuga Tenshō."""
+
+    def __init__(self, x: float, y: float, target_x: float, target_y: float, is_bankai: bool = False):
+        self.x = float(x)
+        self.y = float(y)
+        dx = target_x - x
+        dy = target_y - y
+        dist = math.hypot(dx, dy) + 1e-4
+        spd = 18.0
+        self.vx = (dx / dist) * spd
+        self.vy = (dy / dist) * spd
+        self.angle = math.atan2(dy, dx)
+        self.is_bankai = is_bankai
+        self.life = 1.0
+        self.decay = 0.035
+        self.length = 34.0 if is_bankai else 28.0
+
+    def update(self) -> bool:
+        self.x += self.vx
+        self.y += self.vy
+        self.life -= self.decay
+        return self.life > 0
+
+    def draw(self, ctx: cairo.Context) -> None:
+        alpha = max(0.0, min(1.0, self.life))
+        ctx.save()
+        ctx.translate(self.x, self.y)
+        ctx.rotate(self.angle)
+        L = self.length
+
+        if self.is_bankai:
+            # Bankai: pitch black blade core with surging crimson spiritual aura
+            ctx.set_source_rgba(0.95, 0.1, 0.15, alpha * 0.6)
+            ctx.set_line_width(8.0)
+            ctx.new_path()
+            ctx.arc(0, 0, L, -math.pi * 0.45, math.pi * 0.45)
+            ctx.stroke()
+
+            # Pure black crescent core
+            ctx.set_source_rgba(0.05, 0.05, 0.08, alpha * 0.95)
+            ctx.set_line_width(4.5)
+            ctx.new_path()
+            ctx.arc(0, 0, L, -math.pi * 0.40, math.pi * 0.40)
+            ctx.stroke()
+
+            # Fiery red glint
+            ctx.set_source_rgba(1.0, 0.4, 0.3, alpha * 0.9)
+            ctx.set_line_width(1.8)
+            ctx.new_path()
+            ctx.arc(0, 0, L, -math.pi * 0.35, math.pi * 0.35)
+            ctx.stroke()
+        else:
+            # Shikai: Brilliant blue-white spiritual energy crescent
+            ctx.set_source_rgba(0.1, 0.5, 1.0, alpha * 0.6)
+            ctx.set_line_width(8.0)
+            ctx.new_path()
+            ctx.arc(0, 0, L, -math.pi * 0.45, math.pi * 0.45)
+            ctx.stroke()
+
+            ctx.set_source_rgba(0.7, 0.95, 1.0, alpha * 0.9)
+            ctx.set_line_width(4.0)
+            ctx.new_path()
+            ctx.arc(0, 0, L, -math.pi * 0.40, math.pi * 0.40)
+            ctx.stroke()
+
+            ctx.set_source_rgba(1.0, 1.0, 1.0, alpha)
+            ctx.set_line_width(1.8)
+            ctx.new_path()
+            ctx.arc(0, 0, L, -math.pi * 0.35, math.pi * 0.35)
+            ctx.stroke()
+
+        ctx.restore()
+
+
+class ReiatsuAuraParticle:
+    """Surging vertical spiritual pressure aura column for Captains and Bankai releases."""
+
+    def __init__(self, x: float, y: float, color: Tuple[float, float, float] = (1.0, 0.35, 0.05), height: float = 24.0):
+        self.x = float(x) + random.uniform(-16.0, 16.0)
+        self.y = float(y) + random.uniform(-4.0, 10.0)
+        self.vx = random.uniform(-0.8, 0.8)
+        self.vy = -random.uniform(4.0, 9.0)
+        self.color = color
+        self.width = random.uniform(3.0, 7.0)
+        self.height = height
+        self.life = 1.0
+        self.decay = random.uniform(0.04, 0.08)
+
+    def update(self) -> bool:
+        self.x += self.vx
+        self.y += self.vy
+        self.vy *= 0.95
+        self.life -= self.decay
+        return self.life > 0
+
+    def draw(self, ctx: cairo.Context) -> None:
+        alpha = max(0.0, min(1.0, self.life))
+        ctx.save()
+        r, g, b = self.color
+        # Vertical aura flame streak
+        ctx.set_source_rgba(r, g, b, alpha * 0.5)
+        ctx.new_path()
+        ctx.move_to(self.x - self.width * 0.5, self.y)
+        ctx.line_to(self.x, self.y - self.height)
+        ctx.line_to(self.x + self.width * 0.5, self.y)
+        ctx.close_path()
+        ctx.fill()
+
+        # Inner hot core
+        ctx.set_source_rgba(1.0, 1.0, 1.0, alpha * 0.7)
+        ctx.new_path()
+        ctx.move_to(self.x - self.width * 0.2, self.y)
+        ctx.line_to(self.x, self.y - self.height * 0.7)
+        ctx.line_to(self.x + self.width * 0.2, self.y)
+        ctx.close_path()
+        ctx.fill()
+        ctx.restore()
+
+
 class ParticleManager:
     """Coordinates simulation and drawing of all active particles and effects."""
 
@@ -496,6 +748,11 @@ class ParticleManager:
         self.confetti: List[ConfettiParticle] = []
         self.dust: List[DustParticle] = []
         self.orbs: List[EnergyOrbParticle] = []
+        # Bleach effect particles
+        self.cherry_petals: List[CherryPetalParticle] = []
+        self.ice_crystals: List[IceCrystalParticle] = []
+        self.getsuga_slashes: List[GetsugaSlashParticle] = []
+        self.reiatsu_auras: List[ReiatsuAuraParticle] = []
         self.enabled: bool = True
 
     @property
@@ -510,6 +767,10 @@ class ParticleManager:
             + list(self.confetti)
             + list(self.dust)
             + list(self.orbs)
+            + list(self.cherry_petals)
+            + list(self.ice_crystals)
+            + list(self.getsuga_slashes)
+            + list(self.reiatsu_auras)
         )
 
     def clear(self) -> None:
@@ -524,6 +785,10 @@ class ParticleManager:
         self.confetti.clear()
         self.dust.clear()
         self.orbs.clear()
+        self.cherry_petals.clear()
+        self.ice_crystals.clear()
+        self.getsuga_slashes.clear()
+        self.reiatsu_auras.clear()
 
     def burst_sparks(
         self,
@@ -684,6 +949,39 @@ class ParticleManager:
         self.burst_sparks(x, y, count=count, color=color, size=3.0)
         self.shockwave(x, y, max_radius=50.0, color=color)
 
+    def burst_cherry_petals(self, x: float, y: float, count: int = 14) -> None:
+        """Spawn fluttering Senbonzakura cherry blossom petals for Byakuya Kuchiki."""
+        if not self.enabled:
+            return
+        for _ in range(count):
+            if len(self.cherry_petals) >= self.max_particles:
+                break
+            self.cherry_petals.append(CherryPetalParticle(x, y))
+
+    def burst_ice_crystals(self, x: float, y: float, count: int = 12, size: float = 6.0) -> None:
+        """Spawn shimmering ice shards and frost crystals (Hitsugaya / Rukia)."""
+        if not self.enabled:
+            return
+        for _ in range(count):
+            if len(self.ice_crystals) >= self.max_particles:
+                break
+            self.ice_crystals.append(IceCrystalParticle(x, y, size=size))
+
+    def launch_getsuga(self, x: float, y: float, target_x: float, target_y: float, is_bankai: bool = False) -> None:
+        """Release Getsuga Tenshō crescent energy slash (Ichigo Kurosaki)."""
+        if not self.enabled:
+            return
+        self.getsuga_slashes.append(GetsugaSlashParticle(x, y, target_x, target_y, is_bankai=is_bankai))
+
+    def burst_reiatsu(self, x: float, y: float, color: Tuple[float, float, float] = (1.0, 0.35, 0.05), count: int = 8) -> None:
+        """Spawn surging spiritual pressure column (Yamamoto, Kenpachi, Captain releases)."""
+        if not self.enabled:
+            return
+        for _ in range(count):
+            if len(self.reiatsu_auras) >= self.max_particles:
+                break
+            self.reiatsu_auras.append(ReiatsuAuraParticle(x, y, color=color))
+
     def update(self) -> None:
         """Update simulation for all particles, removing dead ones."""
         if self.sparks:
@@ -706,6 +1004,14 @@ class ParticleManager:
             self.stars = [st for st in self.stars if st.update()]
         if self.orbs:
             self.orbs = [o for o in self.orbs if o.update()]
+        if self.cherry_petals:
+            self.cherry_petals = [cp for cp in self.cherry_petals if cp.update()]
+        if self.ice_crystals:
+            self.ice_crystals = [ic for ic in self.ice_crystals if ic.update()]
+        if self.getsuga_slashes:
+            self.getsuga_slashes = [gs for gs in self.getsuga_slashes if gs.update()]
+        if self.reiatsu_auras:
+            self.reiatsu_auras = [ra for ra in self.reiatsu_auras if ra.update()]
 
     def draw(self, ctx: cairo.Context) -> None:
         """Render all active particles in layered order."""
@@ -726,15 +1032,19 @@ class ParticleManager:
         for d in self.dust:
             d.draw(ctx)
 
-        # 4. Flames
+        # 4. Flames & Reiatsu Auras
         for f in self.flames:
             f.draw(ctx)
+        for ra in self.reiatsu_auras:
+            ra.draw(ctx)
 
-        # 5. Energy Orbs
+        # 5. Energy Orbs & Getsuga Slashes
         for o in self.orbs:
             o.draw(ctx)
+        for gs in self.getsuga_slashes:
+            gs.draw(ctx)
 
-        # 6. Foreground sparks, stars, hearts, confetti
+        # 6. Foreground sparks, stars, hearts, confetti, ice crystals, cherry petals
         for s in self.sparks:
             s.draw(ctx)
         for st in self.stars:
@@ -743,3 +1053,8 @@ class ParticleManager:
             h.draw(ctx)
         for c in self.confetti:
             c.draw(ctx)
+        for ic in self.ice_crystals:
+            ic.draw(ctx)
+        for cp in self.cherry_petals:
+            cp.draw(ctx)
+

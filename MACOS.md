@@ -128,13 +128,23 @@ When launched via terminal:
 # Launch default companion
 buddy
 
-# Launch with a specific companion
+# Launch with a specific companion (Bleach Soul Reapers, Superheroes, Pets, etc.)
+buddy --skin ichigo
+buddy --skin byakuya
+buddy --skin yamamoto
+buddy --skin kenpachi
+buddy --skin hitsugaya
+buddy --skin rukia
+buddy --skin urahara
 buddy --skin thor
 buddy --skin dragon
-buddy --skin ironman
-buddy --skin spiderman
 
-# Open Visual Skin Gallery
+# Set Companion Behavior Mode
+buddy --mode static   # 📌 Desk Pet Mode: Stays peacefully where dropped
+buddy --mode roam     # 🐾 Free Roam Mode: Autonomously wanders your desktop
+buddy --mode follow   # ⚡ Cursor Companion: Actively trails your cursor
+
+# Open Visual Character Gallery (Filtered by Category)
 buddy --skins
 
 # Open Multi-Section Settings
@@ -152,6 +162,35 @@ buddy --stats
 # Terminate running Buddy instance
 buddy --quit
 ```
+
+---
+
+## 🧭 Companion Behavior Modes
+
+| Mode | Visual Indicator | Description |
+|---|---|---|
+| **📌 Desk Pet (Static)** | Default | Buddy stays anchored peacefully right where you drop him. Turns gently to face your cursor, but never chases or obscures active windows. |
+| **🐾 Free Roam** | Autonomous | Buddy wanders across your desktop, exploring perches, windows, and resting at random waypoints. |
+| **⚡ Cursor Companion** | Interactive | Buddy follows your mouse pointer with character-specific animations (flying, running, or acrobatics). |
+
+You can switch modes anytime via:
+* **Menu Bar**: Click the Paw icon -> **🧭 Behavior Mode** -> Select mode.
+* **Context Menu**: Right-click Buddy -> **🧭 Behavior Mode**.
+* **Terminal CLI**: `buddy --mode [static|roam|follow]`.
+
+---
+
+## ⚔️ Bleach Soul Reaper Companions
+
+Buddy includes 7 pure-procedural vector Bleach characters with authentic idle animations, Shikai releases, Bankai transformations, and double-click signature moves:
+
+* **Ichigo Kurosaki (`ichigo`)**: Substitute Soul Reaper with Zangetsu blade, Getsuga Tenshō energy slashes, and Tensa Zangetsu Bankai shroud.
+* **Byakuya Kuchiki (`byakuya`)**: 6th Division Captain with Senbonzakura cherry blossom petal razor clouds, Senkei circular arena, and Shūkei Hakuteiken white wings.
+* **Genryūsai Shigekuni Yamamoto (`yamamoto`)**: Captain-Commander with Ryūjin Jakka flame wall and scorched Zanka no Tachi incinerating heat.
+* **Kenpachi Zaraki (`kenpachi`)**: 11th Division Captain with bell-adorned spiky hair, eyepatch, Nozarashi war axe, and ferocious red Bankai rage.
+* **Tōshirō Hitsugaya (`hitsugaya`)**: 10th Division Captain with Hyōrinmaru ice dragon, Daiguren ice wings, and Sōten Hyōsō frost pillars.
+* **Rukia Kuchiki (`rukia`)**: Sode no Shirayuki white ribbon blade, Tsukishiro ice pillar, and Hakka no Togame absolute zero frost.
+* **Kisuke Urahara (`urahara`)**: Striped bucket hat, cane Benihime crimson energy attacks, and Kannonbiraki Benihime Aratame giant reconstruction.
 
 ---
 

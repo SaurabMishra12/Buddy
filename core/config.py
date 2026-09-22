@@ -39,6 +39,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "sound_volume": 0.7,
     "click_through": False,
     "cursor_follow": True,
+    "companion_mode": "static",  # "static" (Desk Pet / Stay Where Dropped), "roam" (Free Roam), "follow" (Cursor Companion)
     "particles_enabled": True,
     "particle_limit": 300,
     "low_power_mode": False,

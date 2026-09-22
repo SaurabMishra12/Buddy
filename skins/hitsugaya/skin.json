@@ -1,0 +1,15 @@
+{
+  "id": "hitsugaya",
+  "name": "Tōshirō Hitsugaya",
+  "description": "Captain of the 10th Division wielding the ice dragon Hyōrinmaru and Daiguren Bankai wings.",
+  "speed": 1.25,
+  "canFly": true,
+  "abilities": [
+    "hyorinmaru",
+    "daiguren_bankai",
+    "soten_hyoso",
+    "ice_wings",
+    "crossed_arms"
+  ],
+  "category": "bleach"
+}

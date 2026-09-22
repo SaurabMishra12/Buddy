@@ -33,11 +33,19 @@ BUILTIN_SKINS: Dict[str, Tuple[str, str]] = {
     "penguin": ("skins.penguin.character", "PenguinCharacter"),
     "fox": ("skins.fox.character", "FoxCharacter"),
     "slime": ("skins.slime.character", "SlimeCharacter"),
+    # Bleach Soul Reapers
+    "ichigo": ("skins.ichigo.character", "IchigoCharacter"),
+    "byakuya": ("skins.byakuya.character", "ByakuyaCharacter"),
+    "yamamoto": ("skins.yamamoto.character", "YamamotoCharacter"),
+    "kenpachi": ("skins.kenpachi.character", "KenpachiCharacter"),
+    "hitsugaya": ("skins.hitsugaya.character", "HitsugayaCharacter"),
+    "rukia": ("skins.rukia.character", "RukiaCharacter"),
+    "urahara": ("skins.urahara.character", "UraharaCharacter"),
 }
 
 
 def _get_builtin_classes() -> Dict[str, Type[BaseCharacter]]:
-    """Statically import and map all 22 character classes for reliable execution and PyInstaller bundling."""
+    """Statically import and map all 29 character classes for reliable execution and PyInstaller bundling."""
     from skins.thor.character import ThorCharacter
     from skins.dragon.character import DragonCharacter
     from skins.cat.character import CatCharacter
@@ -60,6 +68,14 @@ def _get_builtin_classes() -> Dict[str, Type[BaseCharacter]]:
     from skins.penguin.character import PenguinCharacter
     from skins.fox.character import FoxCharacter
     from skins.slime.character import SlimeCharacter
+    # Bleach Soul Reapers
+    from skins.ichigo.character import IchigoCharacter
+    from skins.byakuya.character import ByakuyaCharacter
+    from skins.yamamoto.character import YamamotoCharacter
+    from skins.kenpachi.character import KenpachiCharacter
+    from skins.hitsugaya.character import HitsugayaCharacter
+    from skins.rukia.character import RukiaCharacter
+    from skins.urahara.character import UraharaCharacter
 
     return {
         "thor": ThorCharacter,
@@ -84,6 +100,14 @@ def _get_builtin_classes() -> Dict[str, Type[BaseCharacter]]:
         "penguin": PenguinCharacter,
         "fox": FoxCharacter,
         "slime": SlimeCharacter,
+        # Bleach Soul Reapers
+        "ichigo": IchigoCharacter,
+        "byakuya": ByakuyaCharacter,
+        "yamamoto": YamamotoCharacter,
+        "kenpachi": KenpachiCharacter,
+        "hitsugaya": HitsugayaCharacter,
+        "rukia": RukiaCharacter,
+        "urahara": UraharaCharacter,
     }
 
 
@@ -126,6 +150,14 @@ class SkinManager:
             ("penguin", "Penguin", "Adorable arctic penguin belly-sliding across the screen and waddling cheerfully.", ["belly_slide", "peck_dance", "snow_hop"]),
             ("fox", "Fox", "Clever woodland red fox with a bushy tail, rapid sprints, and playful pounces.", ["dash_sprint", "pounce_jump", "tail_flick"]),
             ("slime", "Bouncy Slime", "Cheerful jelly creature that bounces with squash-and-stretch physics and splits droplets.", ["super_bounce", "jelly_split", "wobble"]),
+            # Bleach Soul Reapers
+            ("ichigo", "Ichigo Kurosaki", "Substitute Soul Reaper wielding Zangetsu with Getsuga Tenshō and Tensa Zangetsu Bankai.", ["getsuga_tensho", "bankai", "shunpo"]),
+            ("byakuya", "Byakuya Kuchiki", "Captain of the 6th Division wielding Senbonzakura, Senkei, and Shūkei Hakuteiken.", ["senbonzakura", "senkei", "hakuteiken"]),
+            ("yamamoto", "Genryūsai Yamamoto", "Captain-Commander of the Gotei 13 wielding Ryūjin Jakka and Zanka no Tachi.", ["ryujin_jakka", "zanka_no_tachi", "flame_wave"]),
+            ("kenpachi", "Kenpachi Zaraki", "Captain of the 11th Division wielding colossal Nozarashi and demonic red Bankai.", ["nozarashi", "bankai_rage"]),
+            ("hitsugaya", "Tōshirō Hitsugaya", "Captain of the 10th Division wielding the ice dragon Hyōrinmaru and Daiguren Bankai wings.", ["hyorinmaru", "daiguren_bankai", "soten_hyoso", "ice_wings", "flight"]),
+            ("rukia", "Rukia Kuchiki", "Soul Reaper wielding the pure white snow blade Sode no Shirayuki and Hakka no Togame.", ["sode_no_shirayuki", "tsukishiro", "hakka_no_togame"]),
+            ("urahara", "Kisuke Urahara", "Former 12th Division Captain wielding Benihime, paper fan, and Kannonbiraki Bankai.", ["benihime", "kannonbiraki_bankai"]),
         ]
 
         for skin_id, name, desc, abilities in skin_defs:
@@ -135,9 +167,9 @@ class SkinManager:
                 "name": name,
                 "description": desc,
                 "speed": 1.0,
-                "canFly": "flight" in abilities or "glide" in abilities or "web_swing" in abilities or "levitate" in abilities or "flutter" in abilities or "tractor_beam" in abilities or "phase_shift" in abilities,
+                "canFly": "flight" in abilities or "glide" in abilities or "web_swing" in abilities or "levitate" in abilities or "flutter" in abilities or "tractor_beam" in abilities or "phase_shift" in abilities or "ice_wings" in abilities,
                 "abilities": abilities,
-                "category": "superhero" if skin_id in ["thor", "hulk", "ironman", "captain_america", "batman", "superman", "thanos", "spiderman"] else ("animals" if skin_id in ["cat", "dog", "penguin", "fox"] else ("fantasy" if skin_id in ["dragon", "pixel_wizard", "fairy", "vampire", "ghost"] else ("sci-fi" if skin_id in ["space_robot", "alien"] else "cute")))
+                "category": "bleach" if skin_id in ["ichigo", "byakuya", "yamamoto", "kenpachi", "hitsugaya", "rukia", "urahara"] else ("superhero" if skin_id in ["thor", "hulk", "ironman", "captain_america", "batman", "superman", "thanos", "spiderman"] else ("animals" if skin_id in ["cat", "dog", "penguin", "fox"] else ("fantasy" if skin_id in ["dragon", "pixel_wizard", "fairy", "vampire", "ghost"] else ("sci-fi" if skin_id in ["space_robot", "alien"] else "cute"))))
             }
             if meta_path.exists():
                 try:

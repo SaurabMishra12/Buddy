@@ -1,0 +1,15 @@
+{
+  "id": "urahara",
+  "name": "Kisuke Urahara",
+  "description": "Former 12th Division Captain wielding Benihime, paper fan, and Kannonbiraki Bankai.",
+  "speed": 1.15,
+  "canFly": false,
+  "abilities": [
+    "benihime",
+    "kannonbiraki_bankai",
+    "open_fan",
+    "adjust_hat",
+    "gadget_tinker"
+  ],
+  "category": "bleach"
+}

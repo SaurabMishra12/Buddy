@@ -59,6 +59,10 @@ def _handle_ipc_message(engine, msg: dict):
         skin_id = msg.get("skin_id")
         if skin_id:
             engine.switch_skin(skin_id)
+    elif action == "set_mode":
+        mode = msg.get("mode")
+        if mode:
+            engine.set_mode(mode)
     elif action == "settings":
         from ui.settings_dialog import show_settings_dialog
         show_settings_dialog(engine)
@@ -150,6 +154,7 @@ def start_ipc_server(engine):
 def main():
     parser = argparse.ArgumentParser(description="Buddy 2.0 — Your Linux Desktop Companion & Productivity Assistant")
     parser.add_argument("--skin", type=str, help="Launch or switch to specified skin (e.g. thor, dragon, cat, dog, slime, fox, ninja, space_robot...)")
+    parser.add_argument("--mode", type=str, choices=["static", "roam", "follow"], help="Set companion behavior mode: static (Desk Pet), roam (Free Roam), or follow (Cursor Companion)")
     parser.add_argument("--pause", action="store_true", help="Pause running Buddy companion")
     parser.add_argument("--resume", action="store_true", help="Resume running Buddy companion")
     parser.add_argument("--settings", action="store_true", help="Open Buddy multi-section settings dialog")
@@ -235,6 +240,13 @@ def main():
             print("No running Buddy instance found.")
             return
 
+    if args.mode:
+        if send_daemon_command({"action": "set_mode", "mode": args.mode}):
+            print(f"🧭 Switched running Buddy to companion mode: {args.mode.upper()}")
+            return
+        else:
+            config.set("companion_mode", args.mode)
+
     target_skin = skin_manager.normalize_skin_id(args.skin) if args.skin else None
 
     if target_skin and send_daemon_command({"action": "switch_skin", "skin_id": target_skin}):
@@ -242,7 +254,7 @@ def main():
         return
 
     # If already running without extra args, open skins gallery dialog
-    if not target_skin and not args.pause and not args.resume and not args.settings and not args.skins and not args.quit and not args.pomodoro:
+    if not target_skin and not args.mode and not args.pause and not args.resume and not args.settings and not args.skins and not args.quit and not args.pomodoro:
         if send_daemon_command({"action": "skins"}):
             print("⚡ Buddy is already running on desktop! Opened Character Skin Gallery.")
             return

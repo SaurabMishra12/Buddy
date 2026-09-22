@@ -1,0 +1,15 @@
+{
+  "id": "kenpachi",
+  "name": "Kenpachi Zaraki",
+  "description": "Captain of the 11th Division wielding colossal Nozarashi and demonic red Bankai.",
+  "speed": 1.20,
+  "canFly": false,
+  "abilities": [
+    "nozarashi",
+    "bankai_rage",
+    "shoulder_sword",
+    "adjust_eyepatch",
+    "maniac_laugh"
+  ],
+  "category": "bleach"
+}

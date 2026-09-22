@@ -47,6 +47,14 @@ class MenuController(NSObject):
                 self._bar.update_skin_checkmarks(new_id)
 
     @objc.IBAction
+    def onSetCompanionMode_(self, sender):
+        if hasattr(self, "_engine") and self._engine:
+            mode = str(sender.representedObject())
+            self._engine.set_mode(mode)
+            if hasattr(self, "_bar") and self._bar:
+                self._bar.update_mode_checkmarks(mode)
+
+    @objc.IBAction
     def onPreferences_(self, sender):
         if hasattr(self, "_engine") and self._engine:
             AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
@@ -158,10 +166,21 @@ class MacOSMenuBar:
         self.title_item = None
         self.skin_sub_item = None
         self.skin_menu = None
+        self.mode_sub_item = None
+        self.behavior_menu = None
+        self.mode_items = {}
         self.pomo_sub_item = None
         self.scale_menu = None
 
         self._build_menu()
+
+    def update_mode_checkmarks(self, mode: str) -> None:
+        """Update Companion Behavior Mode checkmarks in Menu Bar."""
+        if hasattr(self, "mode_items"):
+            for m, it in self.mode_items.items():
+                it.setState_(AppKit.NSControlStateValueOn if m == mode else AppKit.NSControlStateValueOff)
+        if hasattr(self, "mode_sub_item") and self.mode_sub_item:
+            self.mode_sub_item.setTitle_(f"🧭 Behavior Mode ({mode.capitalize()})")
 
     def _build_menu(self) -> None:
         menu = AppKit.NSMenu.alloc().init()
@@ -177,7 +196,33 @@ class MacOSMenuBar:
         menu.addItem_(self.title_item)
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
-        # 2. Signature Move
+        # 2. Companion Behavior Mode
+        cur_mode = getattr(self.engine, "mode", "static")
+        self.mode_sub_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            f"🧭 Behavior Mode ({cur_mode.capitalize()})", None, ""
+        )
+        self.behavior_menu = AppKit.NSMenu.alloc().init()
+        self.behavior_menu.setAutoenablesItems_(False)
+        self.mode_items = {}
+
+        mode_options = [
+            ("📌 Desk Pet (Static — Stays Put Where Dropped)", "static"),
+            ("🐾 Free Roam (Wanders Desktop Autonomously)", "roam"),
+            ("⚡ Cursor Companion (Follows Cursor)", "follow"),
+        ]
+        for label, m in mode_options:
+            it = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(label, "onSetCompanionMode:", "")
+            it.setTarget_(self.controller)
+            it.setRepresentedObject_(m)
+            if cur_mode == m:
+                it.setState_(AppKit.NSControlStateValueOn)
+            self.behavior_menu.addItem_(it)
+            self.mode_items[m] = it
+
+        self.mode_sub_item.setSubmenu_(self.behavior_menu)
+        menu.addItem_(self.mode_sub_item)
+
+        # Signature Move
         sig_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
             "⚡ Perform Signature Move", "onSignatureMove:", ""
         )
@@ -193,22 +238,46 @@ class MacOSMenuBar:
 
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
-        # 3. Companion Selection Submenu
+        # 3. Companion Selection Submenu (Categorized by Universe)
         self.skin_sub_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
             f"🎭 Switch Companion ({char_name})", None, ""
         )
         self.skin_menu = AppKit.NSMenu.alloc().init()
         self.skin_menu.setAutoenablesItems_(False)
 
+        categories_map = {
+            "bleach": ("⚔️ Bleach Soul Reapers", []),
+            "superhero": ("🦸 Superheroes", []),
+            "animals": ("🐾 Pets & Animals", []),
+            "fantasy": ("🔮 Fantasy & Magic", []),
+            "sci-fi": ("🚀 Sci-Fi & Others", []),
+            "cute": ("✨ Cute Companions", []),
+        }
         for s in skin_manager.get_available_skins():
-            sid = s["id"]
-            s_name = s.get("name", sid)
-            it = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(s_name, "onSwitchSkin:", "")
-            it.setTarget_(self.controller)
-            it.setRepresentedObject_(sid)
-            if sid == cur_id:
-                it.setState_(AppKit.NSControlStateValueOn)
-            self.skin_menu.addItem_(it)
+            cat = s.get("category", "superhero").lower()
+            if cat in categories_map:
+                categories_map[cat][1].append(s)
+            else:
+                categories_map["sci-fi"][1].append(s)
+
+        for cat_key, (cat_label, cat_skins) in categories_map.items():
+            if not cat_skins:
+                continue
+            cat_sub_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(cat_label, None, "")
+            cat_menu = AppKit.NSMenu.alloc().init()
+            cat_menu.setAutoenablesItems_(False)
+            for s in cat_skins:
+                sid = s["id"]
+                s_name = s.get("name", sid)
+                flight = " ✈️" if s.get("canFly") else ""
+                it = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(f"{s_name}{flight}", "onSwitchSkin:", "")
+                it.setTarget_(self.controller)
+                it.setRepresentedObject_(sid)
+                if sid == cur_id:
+                    it.setState_(AppKit.NSControlStateValueOn)
+                cat_menu.addItem_(it)
+            cat_sub_item.setSubmenu_(cat_menu)
+            self.skin_menu.addItem_(cat_sub_item)
 
         self.skin_sub_item.setSubmenu_(self.skin_menu)
         menu.addItem_(self.skin_sub_item)

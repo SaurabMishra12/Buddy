@@ -98,6 +98,14 @@ class BuddyEngine:
         self.is_spinning = False
         self.spin_end_time = 0.0
 
+        # Companion Behavior Mode: "static" (Desk Pet / Stay Where Dropped), "roam" (Free Roam), "follow" (Cursor Companion)
+        self.mode = self.config.get("companion_mode", "static")
+        self.anchor_x = float(self.character.x)
+        self.anchor_y = float(self.character.y)
+        self.roam_target_x = float(self.character.x)
+        self.roam_target_y = float(self.character.y)
+        self.roam_next_decision = time.time() + 3.0
+
         # Smart hysteresis deadzone (False = calm/idle near cursor; True = chasing far cursor)
         self.is_chasing = False
 
@@ -254,6 +262,33 @@ class BuddyEngine:
         self.window.set_click_through(self.click_through)
         return self.click_through
 
+    def set_mode(self, mode: str) -> str:
+        """Switch companion behavior mode ('static', 'roam', 'follow')."""
+        mode = mode.lower().strip()
+        if mode in ("static", "roam", "follow"):
+            self.mode = mode
+            self.config.set("companion_mode", mode)
+            self.anchor_x = float(self.character.x)
+            self.anchor_y = float(self.character.y)
+            self.roam_target_x = float(self.character.x)
+            self.roam_target_y = float(self.character.y)
+            self.is_chasing = False
+            self.character.vx = 0.0
+            self.character.vy = 0.0
+            meta = skin_manager.get_metadata(self.character.skin_id) or {}
+            if mode == "static":
+                if meta.get("canFly", False):
+                    self.character.state = CharacterState.HOVER
+                else:
+                    self.character.state = CharacterState.IDLE
+            print(f"[Buddy Engine] Switched companion mode: {mode.upper()}")
+            if hasattr(self, "tray") and self.tray and hasattr(self.tray, "update_mode_checkmarks"):
+                try:
+                    self.tray.update_mode_checkmarks(mode)
+                except Exception:
+                    pass
+        return self.mode
+
     def set_scale(self, scale: float) -> None:
         """Adjust character scale."""
         self.character.scale = max(0.5, min(2.5, scale))
@@ -358,10 +393,54 @@ class BuddyEngine:
             self.character.trigger_ability("super_bounce", self.cursor_x, self.cursor_y, self.particles, self.audio)
             self.particles.burst_confetti(cx, cy - 10, count=12)
             self.audio.play("sparkle")
+        elif skin_id == "ichigo":
+            is_bankai = getattr(self.character, "is_bankai", False)
+            self.character.trigger_ability("getsuga_tensho", self.cursor_x, self.cursor_y, self.particles, self.audio)
+            self.particles.launch_getsuga(cx, cy, self.cursor_x, self.cursor_y, is_bankai=is_bankai)
+            self.particles.burst_reiatsu(cx, cy, color=(0.1, 0.6, 1.0) if not is_bankai else (0.9, 0.1, 0.1), count=12)
+            self.shake.trigger(10.0 if is_bankai else 7.0)
+            self.audio.play("swoosh")
+        elif skin_id == "byakuya":
+            self.character.trigger_ability("senbonzakura", self.cursor_x, self.cursor_y, self.particles, self.audio)
+            self.particles.burst_cherry_petals(cx, cy, count=28)
+            self.particles.shockwave(cx, cy, max_radius=85.0, color=(1.0, 0.5, 0.75))
+            self.shake.trigger(6.0)
+            self.audio.play("magic")
+        elif skin_id == "yamamoto":
+            self.character.trigger_ability("ryujin_jakka", self.cursor_x, self.cursor_y, self.particles, self.audio)
+            self.particles.burst_reiatsu(cx, cy, color=(1.0, 0.3, 0.0), count=18)
+            self.particles.shockwave(cx, cy, max_radius=110.0, color=(1.0, 0.2, 0.0))
+            self.shake.trigger(15.0)
+            self.audio.play("fire")
+        elif skin_id == "kenpachi":
+            self.character.trigger_ability("nozarashi", self.cursor_x, self.cursor_y, self.particles, self.audio)
+            self.particles.burst_reiatsu(cx, cy, color=(0.85, 0.05, 0.1), count=20)
+            self.particles.shockwave(cx, cy, max_radius=120.0, color=(0.9, 0.1, 0.1))
+            self.shake.trigger(16.0)
+            self.audio.play("roar")
+        elif skin_id == "hitsugaya":
+            self.character.trigger_ability("hyorinmaru", self.cursor_x, self.cursor_y, self.particles, self.audio)
+            self.particles.burst_ice_crystals(cx, cy, count=24)
+            self.particles.shockwave(cx, cy, max_radius=90.0, color=(0.4, 0.85, 1.0))
+            self.shake.trigger(8.0)
+            self.audio.play("magic")
+        elif skin_id == "rukia":
+            self.character.trigger_ability("sode_no_shirayuki", self.cursor_x, self.cursor_y, self.particles, self.audio)
+            self.particles.burst_ice_crystals(cx, cy, count=24)
+            self.particles.shockwave(cx, cy, max_radius=85.0, color=(0.85, 0.95, 1.0))
+            self.shake.trigger(6.0)
+            self.audio.play("magic")
+        elif skin_id == "urahara":
+            self.character.trigger_ability("benihime", self.cursor_x, self.cursor_y, self.particles, self.audio)
+            self.particles.burst_reiatsu(cx, cy, color=(0.9, 0.15, 0.3), count=14)
+            self.particles.shockwave(cx, cy, max_radius=85.0, color=(0.9, 0.15, 0.3))
+            self.shake.trigger(8.0)
+            self.audio.play("laser")
         else:
             if not self.character.trigger_ability("special", cx, cy, self.particles, self.audio):
                 self.particles.burst_sparks(cx, cy, count=15)
                 self.audio.play("magic")
+
 
     def _on_pomodoro_event(self, event_name: str, state: str, remaining: float) -> None:
         """Handle Pomodoro milestones and trigger character reactions, audio, and particles."""
@@ -558,31 +637,128 @@ class BuddyEngine:
                             self.character.x += self.character.vx
                             self.character.y += self.character.vy
 
-                    # Screen boundary clamp
-                    self.character.x = max(min_x + 50.0, min(min_x + screen_w - 50.0, self.character.x))
-                    self.character.y = max(min_y + 50.0, min(min_y + screen_h - 50.0, self.character.y))
+                # Screen boundary clamp
+                self.character.x = max(min_x + 50.0, min(min_x + screen_w - 50.0, self.character.x))
+                self.character.y = max(min_y + 50.0, min(min_y + screen_h - 50.0, self.character.y))
+                self.anchor_x = float(self.character.x)
+                self.anchor_y = float(self.character.y)
+
+            elif self.mode == "static":
+                # Desk Pet Mode: Buddy stays calm right where you dropped him!
+                self.character.x = self.anchor_x
+                self.character.y = self.anchor_y
+                self.character.vx = 0.0
+                self.character.vy = 0.0
+                self.is_chasing = False
+                meta = skin_manager.get_metadata(self.character.skin_id) or {}
+                if meta.get("canFly", False):
+                    if self.character.state not in (CharacterState.HOVER, CharacterState.SLEEP, CharacterState.SIT):
+                        self.character.state = CharacterState.HOVER
+                else:
+                    if self.character.state not in (CharacterState.IDLE, CharacterState.SLEEP, CharacterState.SIT):
+                        self.character.state = CharacterState.IDLE
+
+                # Softly turn to face user's cursor without moving
+                if abs(self.cursor_x - self.character.x) > 20.0:
+                    self.character.facing_right = (self.cursor_x >= self.character.x)
 
             else:
-                # Normal peaceful behavior when not dragging:
-                # Closer than 50px -> Character stays calm in IDLE/HOVER; user can touch/click/drag without fleeing!
-                dist_to_cursor = math.hypot(self.cursor_x - self.character.x, self.cursor_y - self.character.y)
-                self.is_chasing = (dist_to_cursor > 50.0)
+                # Autonomous Roam or Cursor Follow modes
+                if self.mode == "roam":
+                    # Autonomous wandering to random waypoints
+                    if now >= self.roam_next_decision:
+                        self.roam_next_decision = now + random.uniform(6.0, 14.0)
+                        self.roam_target_x = random.uniform(min_x + 100.0, min_x + screen_w - 100.0)
+                        self.roam_target_y = random.uniform(min_y + 100.0, min_y + screen_h - 100.0)
+                    target_x = self.roam_target_x
+                    target_y = self.roam_target_y
+                    dist_to_target = math.hypot(target_x - self.character.x, target_y - self.character.y)
+                    should_move = dist_to_target > 40.0
+                    self.is_chasing = False
+                else:
+                    # "follow": active cursor following
+                    target_x = self.cursor_x
+                    target_y = self.cursor_y
+                    dist_to_cursor = math.hypot(self.cursor_x - self.character.x, self.cursor_y - self.character.y)
+                    self.is_chasing = (dist_to_cursor > 50.0)
+                    should_move = self.is_chasing
 
-                # Handle signature move active window & acrobatics
-                if self.is_spinning:
-                    if now < self.spin_end_time:
-                        # Only acrobatic pet skins (e.g. cat) perform a smooth 360° somersault;
-                        # superhero and creature characters maintain their authentic upright poses and kinematics!
-                        if self.character.skin_id == "cat":
-                            t_rel = max(0.0, min(1.0, (self.spin_end_time - now) / 0.8))
-                            self.character.tilt = (1.0 - t_rel) * 2.0 * math.pi
+                if should_move:
+                    skin = self.character.skin_id
+                    meta = skin_manager.get_metadata(skin) or {}
+
+                    if hasattr(self.character, "nav_to"):
+                        curr_target = getattr(self.character, "nav_target", None)
+                        if curr_target is None or math.hypot(target_x - curr_target[0], target_y - curr_target[1]) > 40.0:
+                            self.character.nav_to(target_x, target_y)
                     else:
-                        self.is_spinning = False
-                        if self.character.skin_id == "cat":
-                            self.character.tilt = 0.0
+                        dx = target_x - self.character.x
+                        dy = target_y - self.character.y
+                        dist = math.hypot(dx, dy)
+                        is_flyer = meta.get("canFly", False) or getattr(self.character, "can_fly", False) or skin in ("superman", "thor", "ironman", "dragon", "harry_potter", "thanos")
 
-            # Inject Pomodoro and Focus context for intelligent behavior selection
+                        if is_flyer:
+                            if dist > 12.0:
+                                self.character.facing_right = (dx >= 0.0)
+                                self.character.state = CharacterState.FLY
+                                if hasattr(self.character, "is_seated"):
+                                    self.character.is_seated = False
+                                if hasattr(self.character, "is_sleeping"):
+                                    self.character.is_sleeping = False
+                                follow_spd = min(15.0, max(2.5, dist * 0.085))
+                                target_vx = (dx / dist) * follow_spd
+                                target_vy = (dy / dist) * follow_spd
+
+                                self.character.vx += (target_vx - self.character.vx) * 0.22
+                                self.character.vy += (target_vy - self.character.vy) * 0.22
+                                self.character.x += self.character.vx
+                                self.character.y += self.character.vy
+
+                                target_tilt = (self.character.vx / 15.0) * 0.22
+                                self.character.tilt += (target_tilt - self.character.tilt) * 0.16
+                            else:
+                                self.character.state = CharacterState.HOVER
+                                self.character.vx *= 0.82
+                                self.character.vy *= 0.82
+                                self.character.tilt *= 0.82
+                        else:
+                            self.character.facing_right = (dx >= 0.0)
+                            if dist > 12.0:
+                                follow_spd = min(14.0, max(2.5, dist * 0.10))
+                                target_vx = (dx / dist) * follow_spd
+                                target_vy = (dy / dist) * follow_spd
+                                self.character.vx += (target_vx - self.character.vx) * 0.25
+                                self.character.vy += (target_vy - self.character.vy) * 0.25
+                                self.character.x += self.character.vx
+                                self.character.y += self.character.vy
+                                self.character.state = CharacterState.RUN
+                            else:
+                                self.character.state = CharacterState.IDLE
+                                self.character.vx *= 0.8
+                                self.character.vy *= 0.8
+
+                        # Screen boundary clamp
+                        self.character.x = max(min_x + 50.0, min(min_x + screen_w - 50.0, self.character.x))
+                        self.character.y = max(min_y + 50.0, min(min_y + screen_h - 50.0, self.character.y))
+                else:
+                    self.character.vx *= 0.8
+                    self.character.vy *= 0.8
+
+            # Handle signature move active window & acrobatics
+            if self.is_spinning:
+                if now < self.spin_end_time:
+                    if self.character.skin_id == "cat":
+                        t_rel = max(0.0, min(1.0, (self.spin_end_time - now) / 0.8))
+                        self.character.tilt = (1.0 - t_rel) * 2.0 * math.pi
+                else:
+                    self.is_spinning = False
+                    if self.character.skin_id == "cat":
+                        self.character.tilt = 0.0
+
+            # Inject Companion Mode, Pomodoro, and Focus context for intelligent behavior selection
             cfg_context = dict(self.config.data)
+            cfg_context["companion_mode"] = self.mode
+            cfg_context["cursor_follow"] = (self.mode == "follow")
             cfg_context["pomodoro_state"] = self.pomodoro.state
             cfg_context["pomodoro_remaining"] = self.pomodoro.remaining_seconds
             cfg_context["focus_mode"] = (self.pomodoro.state == PomodoroState.WORK) or self.config.get("focus_mode", False)
@@ -774,6 +950,23 @@ class BuddyEngine:
                 self.particles.burst_sparks(self.character.x, self.character.y, count=14, color=CYAN_GLOW)
             elif self.character.skin_id == "hulk":
                 self.audio.play("roar")
+            elif self.character.skin_id == "byakuya":
+                self.audio.play("magic")
+                self.particles.burst_cherry_petals(self.character.x, self.character.y, count=8)
+            elif self.character.skin_id in ("hitsugaya", "rukia"):
+                self.audio.play("magic")
+                self.particles.burst_ice_crystals(self.character.x, self.character.y, count=8)
+            elif self.character.skin_id == "yamamoto":
+                self.audio.play("fire")
+                self.particles.burst_reiatsu(self.character.x, self.character.y, color=(1.0, 0.3, 0.0), count=6)
+            elif self.character.skin_id == "kenpachi":
+                self.audio.play("roar")
+                self.particles.burst_reiatsu(self.character.x, self.character.y, color=(0.85, 0.05, 0.1), count=6)
+            elif self.character.skin_id == "ichigo":
+                self.audio.play("swoosh")
+                self.particles.burst_reiatsu(self.character.x, self.character.y, color=(0.1, 0.6, 1.0), count=6)
+            elif self.character.skin_id == "urahara":
+                self.audio.play("laser")
             else:
                 self.audio.play("magic")
 
@@ -787,20 +980,31 @@ class BuddyEngine:
             was_dragging = self.is_dragging
             self.is_dragging = False
             self.is_chasing = False
+            self.anchor_x = float(self.character.x)
+            self.anchor_y = float(self.character.y)
+            self.character.vx = 0.0
+            self.character.vy = 0.0
             skin = self.character.skin_id
+            meta = skin_manager.get_metadata(skin) or {}
 
-            target_x = self.cursor_x
-            target_y = self.cursor_y
-
-            from core.platforms import platform_manager
-            platform_manager.register_user_click_ledge(target_x, target_y)
-
-            if hasattr(self.character, "nav_to"):
-                self.character.nav_to(target_x, target_y)
-            elif skin in ("superman", "thor", "ironman", "dragon", "harry_potter", "thanos"):
-                self.character.state = CharacterState.HOVER
+            if self.mode == "static":
+                if meta.get("canFly", False):
+                    self.character.state = CharacterState.HOVER
+                else:
+                    self.character.state = CharacterState.IDLE
             else:
-                self.character.state = CharacterState.IDLE
+                target_x = self.cursor_x
+                target_y = self.cursor_y
+
+                from core.platforms import platform_manager
+                platform_manager.register_user_click_ledge(target_x, target_y)
+
+                if hasattr(self.character, "nav_to"):
+                    self.character.nav_to(target_x, target_y)
+                elif meta.get("canFly", False) or skin in ("superman", "thor", "ironman", "dragon", "harry_potter", "thanos"):
+                    self.character.state = CharacterState.HOVER
+                else:
+                    self.character.state = CharacterState.IDLE
             return True
         return False
 
