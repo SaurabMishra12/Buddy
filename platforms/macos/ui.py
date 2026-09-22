@@ -5,21 +5,25 @@ from pathlib import Path
 from typing import Any, Optional, List, Dict
 
 import AppKit
+import objc
 from Foundation import NSRect, NSPoint, NSSize, NSObject
 from skins.manager import skin_manager
 from pomodoro.manager import PomodoroState
 from pomodoro.statistics import PomodoroStats
-from platforms.macos.menu_bar import MenuActionTarget
+from platforms.macos.menu_bar import MenuController
 from platforms.macos.autostart import MacOSAutostart
 
 # Global references to prevent garbage collection while windows/menus are open
 _active_dialogs: List[Any] = []
-_active_menu_targets: List[Any] = []
+_context_controller: Optional[MenuController] = None
 
 
-def _toggle_sound(engine: Any, enabled: bool) -> None:
-    engine.audio.enabled = enabled
-    engine.config.set("sound_enabled", enabled)
+def _get_context_controller(engine: Any) -> MenuController:
+    global _context_controller
+    if _context_controller is None:
+        _context_controller = MenuController.alloc().init()
+    _context_controller._engine = engine
+    return _context_controller
 
 
 # ============================================================================
@@ -27,107 +31,137 @@ def _toggle_sound(engine: Any, enabled: bool) -> None:
 # ============================================================================
 
 def show_macos_context_menu(engine: Any, event: Any) -> None:
-    """Display native macOS popup context menu at mouse location."""
-    global _active_menu_targets
-    _active_menu_targets.clear()
-
+    """Display native macOS popup context menu at mouse location with persistent MenuController."""
+    ctrl = _get_context_controller(engine)
     menu = AppKit.NSMenu.alloc().init()
     menu.setAutoenablesItems_(False)
-    local_targets: List[Any] = []
-
-    def add_item(title: str, cb=None, parent_menu=menu):
-        item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, None, "")
-        if cb:
-            target = MenuActionTarget.alloc().init()
-            target.callback = cb
-            local_targets.append(target)
-            _active_menu_targets.append(target)
-            item.setTarget_(target)
-            item.setAction_("onAction:")
-        parent_menu.addItem_(item)
-        return item
 
     # 1. Signature Move
-    add_item("⚡ Perform Signature Move", lambda _: engine.trigger_signature_ability())
-    add_item("➡️ Next Character (Scroll Wheel / Middle-Click)", lambda _: engine.next_skin())
+    sig_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        "⚡ Perform Signature Move", "onSignatureMove:", ""
+    )
+    sig_item.setTarget_(ctrl)
+    menu.addItem_(sig_item)
+
+    next_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        "➡️ Next Companion (Scroll Wheel)", "onNextSkin:", ""
+    )
+    next_item.setTarget_(ctrl)
+    menu.addItem_(next_item)
+
     menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
     # 2. Switch Skin Submenu
     cur_id = engine.character.skin_id
-    skin_sub = add_item(f"🎭 Switch Skin ({cur_id.replace('_', ' ').title()})")
+    char_name = cur_id.replace("_", " ").title()
+    skin_sub = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        f"🎭 Switch Companion ({char_name})", None, ""
+    )
     skin_menu = AppKit.NSMenu.alloc().init()
+    skin_menu.setAutoenablesItems_(False)
     for s in skin_manager.get_available_skins():
         sid = s["id"]
-        prefix = "✓ " if sid == cur_id else "   "
         s_name = s.get("name", sid)
-        add_item(
-            f"{prefix}{s_name}",
-            lambda _, target_id=sid: (engine.switch_skin(target_id), engine.window.queue_draw()),
-            skin_menu
-        )
+        it = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(s_name, "onSwitchSkin:", "")
+        it.setTarget_(ctrl)
+        it.setRepresentedObject_(sid)
+        if sid == cur_id:
+            it.setState_(AppKit.NSControlStateValueOn)
+        skin_menu.addItem_(it)
     skin_sub.setSubmenu_(skin_menu)
+    menu.addItem_(skin_sub)
 
     # 3. Abilities Submenu
     skin_meta = skin_manager.get_metadata(cur_id)
     if skin_meta and skin_meta.get("abilities"):
-        ab_sub = add_item("✨ Abilities & Stunts")
+        ab_sub = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("✨ Abilities & Stunts", None, "")
         ab_menu = AppKit.NSMenu.alloc().init()
+        ab_menu.setAutoenablesItems_(False)
         for ab in skin_meta["abilities"]:
-            add_item(
-                ab.replace("_", " ").title(),
-                lambda _, a=ab: engine.character.trigger_ability(
-                    a, engine.cursor_x, engine.cursor_y, engine.particles, engine.audio
-                ),
-                ab_menu
+            ab_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                ab.replace("_", " ").title(), "onAbility:", ""
             )
+            ab_item.setTarget_(ctrl)
+            ab_item.setRepresentedObject_(ab)
+            ab_menu.addItem_(ab_item)
         ab_sub.setSubmenu_(ab_menu)
+        menu.addItem_(ab_sub)
 
     menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
     # 4. Pomodoro Submenu
     pomo = getattr(engine, "pomodoro", None)
     if pomo:
-        pomo_sub = add_item(f"🍅 Pomodoro [{pomo.status_label}]")
+        pomo_sub = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            f"🍅 Pomodoro [{pomo.status_label}]", None, ""
+        )
         pomo_menu = AppKit.NSMenu.alloc().init()
-        if pomo.state in (PomodoroState.WORK, PomodoroState.SHORT_BREAK, PomodoroState.LONG_BREAK):
-            add_item("⏸ Pause Focus Session", lambda _: pomo.pause(), pomo_menu)
-        elif pomo.state == PomodoroState.PAUSED:
-            add_item("▶ Resume Focus Session", lambda _: pomo.resume(), pomo_menu)
-        else:
-            add_item("▶ Start Focus Session (25 min)", lambda _: pomo.start_work(), pomo_menu)
-        add_item("⏭ Skip to Next Interval", lambda _: pomo.skip(), pomo_menu)
-        add_item("⏹ Reset Timer", lambda _: pomo.reset(), pomo_menu)
+        pomo_menu.setAutoenablesItems_(False)
+        for title, act in [
+            ("▶ Start Focus Session (25 min)", "start"),
+            ("⏸ Pause Focus Session", "pause"),
+            ("▶ Resume Focus Session", "resume"),
+            ("⏭ Skip to Next Interval", "skip"),
+            ("⏹ Reset Timer", "reset"),
+        ]:
+            p_it = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, "onPomodoroAction:", "")
+            p_it.setTarget_(ctrl)
+            p_it.setRepresentedObject_(act)
+            pomo_menu.addItem_(p_it)
         pomo_sub.setSubmenu_(pomo_menu)
+        menu.addItem_(pomo_sub)
 
     menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
     # 5. Modes & Preferences
-    add_item(
-        f"{'✓ ' if engine.click_through else '   '}Click-Through Mode (Ghost)",
-        lambda _: engine.toggle_click_through()
+    ct_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        "Click-Through Mode (Ghost)", "onToggleClickThrough:", ""
     )
-    add_item(
-        f"{'✓ ' if not engine.audio.enabled else '   '}Quiet Mode (Mute)",
-        lambda _: _toggle_sound(engine, not engine.audio.enabled)
+    ct_item.setTarget_(ctrl)
+    ct_item.setState_(AppKit.NSControlStateValueOn if engine.click_through else AppKit.NSControlStateValueOff)
+    menu.addItem_(ct_item)
+
+    quiet_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        "Quiet Mode (Mute)", "onToggleMute:", ""
     )
+    quiet_item.setTarget_(ctrl)
+    quiet_item.setState_(AppKit.NSControlStateValueOff if engine.audio.enabled else AppKit.NSControlStateValueOn)
+    menu.addItem_(quiet_item)
 
     # Scale submenu
-    scale_sub = add_item("🔍 Companion Scale")
+    scale_sub = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("🔍 Companion Scale", None, "")
     scale_menu = AppKit.NSMenu.alloc().init()
+    scale_menu.setAutoenablesItems_(False)
     cur_sc = getattr(engine.character, "scale", 1.0)
     for label, sc in [("Small (0.75x)", 0.75), ("Normal (1.0x)", 1.0), ("Large (1.35x)", 1.35), ("Giant (1.75x)", 1.75)]:
-        chk = "✓ " if abs(cur_sc - sc) < 0.1 else "   "
-        add_item(f"{chk}{label}", lambda _, val=sc: engine.set_scale(val), scale_menu)
+        s_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(label, "onSetScale:", "")
+        s_item.setTarget_(ctrl)
+        s_item.setRepresentedObject_(sc)
+        if abs(cur_sc - sc) < 0.1:
+            s_item.setState_(AppKit.NSControlStateValueOn)
+        scale_menu.addItem_(s_item)
     scale_sub.setSubmenu_(scale_menu)
+    menu.addItem_(scale_sub)
 
     menu.addItem_(AppKit.NSMenuItem.separatorItem())
-    add_item("⚙️ Preferences...", lambda _: show_macos_settings_dialog(engine))
-    add_item("🎨 Character Gallery...", lambda _: show_macos_skin_selector(engine))
-    add_item("📈 Productivity Dashboard...", lambda _: show_macos_stats_dialog(engine))
-    menu.addItem_(AppKit.NSMenuItem.separatorItem())
-    add_item("❌ Quit Buddy", lambda _: AppKit.NSApplication.sharedApplication().terminate_(None))
 
-    menu._retained_targets = local_targets
+    pref_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("⚙️ Preferences...", "onPreferences:", "")
+    pref_item.setTarget_(ctrl)
+    menu.addItem_(pref_item)
+
+    gal_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("🎨 Character Gallery...", "onSkinGallery:", "")
+    gal_item.setTarget_(ctrl)
+    menu.addItem_(gal_item)
+
+    stats_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("📈 Productivity Dashboard...", "onStats:", "")
+    stats_item.setTarget_(ctrl)
+    menu.addItem_(stats_item)
+
+    menu.addItem_(AppKit.NSMenuItem.separatorItem())
+
+    quit_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("❌ Quit Buddy", "onQuit:", "")
+    quit_item.setTarget_(ctrl)
+    menu.addItem_(quit_item)
 
     ns_event = getattr(event, "ns_event", None)
     if ns_event and hasattr(engine.window, "view"):
@@ -139,22 +173,26 @@ def show_macos_context_menu(engine: Any, event: Any) -> None:
 # ============================================================================
 
 class SettingsDialogTarget(NSObject):
+    @objc.IBAction
     def onCancel_(self, sender):
         if hasattr(self, "_win") and self._win:
             self._win.close()
             if self._win in _active_dialogs:
                 _active_dialogs.remove(self._win)
 
+    @objc.IBAction
     def onScaleChange_(self, sender):
         if hasattr(self, "_lbl_scale") and self._lbl_scale:
             val = round(float(sender.doubleValue()), 2)
             self._lbl_scale.setStringValue_(f"Scale: {int(val * 100)}%")
 
+    @objc.IBAction
     def onVolChange_(self, sender):
         if hasattr(self, "_lbl_vol") and self._lbl_vol:
             val = round(float(sender.doubleValue()), 2)
             self._lbl_vol.setStringValue_(f"Volume: {int(val * 100)}%")
 
+    @objc.IBAction
     def onSave_(self, sender):
         if not hasattr(self, "_ctx") or not self._ctx:
             return
@@ -213,26 +251,32 @@ class GalleryTableSource(NSObject):
 
 
 class GalleryDialogTarget(NSObject):
+    @objc.IBAction
     def onCategoryChange_(self, sender):
         if hasattr(self, "_filter_cb") and self._filter_cb:
             self._filter_cb()
 
+    @objc.IBAction
     def onSearchChange_(self, sender):
         if hasattr(self, "_filter_cb") and self._filter_cb:
             self._filter_cb()
 
+    @objc.IBAction
     def onTableSelect_(self, sender):
         if hasattr(self, "_update_card_cb") and self._update_card_cb:
             self._update_card_cb()
 
+    @objc.IBAction
     def onTableDoubleClick_(self, sender):
         if hasattr(self, "_apply_cb") and self._apply_cb:
             self._apply_cb()
 
+    @objc.IBAction
     def onApply_(self, sender):
         if hasattr(self, "_apply_cb") and self._apply_cb:
             self._apply_cb()
 
+    @objc.IBAction
     def onClose_(self, sender):
         if hasattr(self, "_win") and self._win:
             self._win.close()
@@ -241,6 +285,7 @@ class GalleryDialogTarget(NSObject):
 
 
 class StatsDialogTarget(NSObject):
+    @objc.IBAction
     def onClose_(self, sender):
         if hasattr(self, "_win") and self._win:
             self._win.close()

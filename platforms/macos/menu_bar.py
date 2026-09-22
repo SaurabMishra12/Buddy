@@ -5,45 +5,137 @@ from pathlib import Path
 from typing import Any, Optional
 
 import AppKit
+import objc
 from Foundation import NSObject, NSSize
 from skins.manager import skin_manager
 from pomodoro.manager import PomodoroState
 
 
-class MenuActionTarget(NSObject):
-    """Reusable Obj-C target for dispatching NSMenuItem callbacks."""
+class MenuController(NSObject):
+    """Primary Objective-C action dispatcher for all menu bar items."""
 
-    def onAction_(self, sender):
-        if hasattr(self, "callback") and self.callback:
-            try:
-                self.callback(sender)
-            except Exception as e:
-                import traceback
-                print(f"[Buddy Menu] Error executing menu callback: {e}", file=sys.stderr)
-                traceback.print_exc()
-
-
-class MenuUpdateDelegate(NSObject):
-    """Delegate called immediately before the menu opens to ensure fresh state."""
-
-    def menuWillOpen_(self, menu):
+    @objc.IBAction
+    def onSwitchSkin_(self, sender):
+        if not hasattr(self, "_engine") or not self._engine:
+            return
+        skin_id = str(sender.representedObject())
+        self._engine.switch_skin(skin_id)
+        if hasattr(self._engine.window, "queue_draw"):
+            self._engine.window.queue_draw()
         if hasattr(self, "_bar") and self._bar:
+            self._bar.update_skin_checkmarks(skin_id)
+
+    @objc.IBAction
+    def onAbility_(self, sender):
+        if hasattr(self, "_engine") and self._engine:
+            ab = str(sender.representedObject())
+            self._engine.character.trigger_ability(
+                ab, self._engine.cursor_x, self._engine.cursor_y,
+                self._engine.particles, self._engine.audio
+            )
+
+    @objc.IBAction
+    def onSignatureMove_(self, sender):
+        if hasattr(self, "_engine") and self._engine:
+            self._engine.trigger_signature_ability()
+
+    @objc.IBAction
+    def onNextSkin_(self, sender):
+        if hasattr(self, "_engine") and self._engine:
+            new_id = self._engine.next_skin()
+            if hasattr(self, "_bar") and self._bar:
+                self._bar.update_skin_checkmarks(new_id)
+
+    @objc.IBAction
+    def onPreferences_(self, sender):
+        if hasattr(self, "_engine") and self._engine:
+            AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+            from platforms.macos.ui import show_macos_settings_dialog
+            show_macos_settings_dialog(self._engine)
+
+    @objc.IBAction
+    def onSkinGallery_(self, sender):
+        if hasattr(self, "_engine") and self._engine:
+            AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+            from platforms.macos.ui import show_macos_skin_selector
+            show_macos_skin_selector(self._engine)
+
+    @objc.IBAction
+    def onStats_(self, sender):
+        if hasattr(self, "_engine") and self._engine:
+            AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+            from platforms.macos.ui import show_macos_stats_dialog
+            show_macos_stats_dialog(self._engine)
+
+    @objc.IBAction
+    def onToggleClickThrough_(self, sender):
+        if hasattr(self, "_engine") and self._engine:
+            val = self._engine.toggle_click_through()
+            sender.setState_(AppKit.NSControlStateValueOn if val else AppKit.NSControlStateValueOff)
+
+    @objc.IBAction
+    def onToggleMute_(self, sender):
+        if hasattr(self, "_engine") and self._engine:
+            new_enabled = not self._engine.audio.enabled
+            self._engine.audio.enabled = new_enabled
+            self._engine.config.set("sound_enabled", new_enabled)
+            sender.setState_(AppKit.NSControlStateValueOff if new_enabled else AppKit.NSControlStateValueOn)
+
+    @objc.IBAction
+    def onSetScale_(self, sender):
+        if hasattr(self, "_engine") and self._engine:
             try:
-                self._bar.rebuild_menu_items(menu)
+                scale_val = float(sender.representedObject())
+                self._engine.set_scale(scale_val)
+                menu = sender.menu()
+                if menu:
+                    for it in menu.itemArray():
+                        it.setState_(AppKit.NSControlStateValueOn if it == sender else AppKit.NSControlStateValueOff)
             except Exception as e:
-                print(f"[Buddy Menu] Error in menuWillOpen: {e}", file=sys.stderr)
+                print(f"[Buddy Menu] Error setting scale: {e}", file=sys.stderr)
+
+    @objc.IBAction
+    def onPomodoroAction_(self, sender):
+        if hasattr(self, "_engine") and self._engine:
+            pomo = getattr(self._engine, "pomodoro", None)
+            if not pomo:
+                return
+            act = str(sender.representedObject())
+            if act == "start":
+                pomo.start_work()
+            elif act == "pause":
+                pomo.pause()
+            elif act == "resume":
+                pomo.resume()
+            elif act == "skip":
+                pomo.skip()
+            elif act == "reset":
+                pomo.reset()
+            if hasattr(self, "_bar") and self._bar:
+                self._bar.update_pomodoro_label()
+
+    @objc.IBAction
+    def onHelp_(self, sender):
+        if hasattr(self, "_bar") and self._bar:
+            self._bar._show_help()
+
+    @objc.IBAction
+    def onQuit_(self, sender):
+        AppKit.NSApplication.sharedApplication().terminate_(None)
 
 
 class MacOSMenuBar:
-    """Native macOS Status Item in Menu Bar."""
+    """Native macOS Status Item in Menu Bar with persistent target dispatch."""
 
     def __init__(self, engine: Any):
         self.engine = engine
         self.status_bar = AppKit.NSStatusBar.systemStatusBar()
         self.status_item = self.status_bar.statusItemWithLength_(AppKit.NSVariableStatusItemLength)
 
-        # Persistent target retention pool to prevent garbage collection
-        self._targets = []
+        # Persistent controller that lives as long as the status bar item
+        self.controller = MenuController.alloc().init()
+        self.controller._engine = self.engine
+        self.controller._bar = self
 
         # Configure menu bar button with crisp native SF Symbol
         button = self.status_item.button()
@@ -63,111 +155,122 @@ class MacOSMenuBar:
             else:
                 button.setTitle_("🐾")
 
-        self.menu_delegate = MenuUpdateDelegate.alloc().init()
-        self.menu_delegate._bar = self
+        self.title_item = None
+        self.skin_sub_item = None
+        self.skin_menu = None
+        self.pomo_sub_item = None
+        self.scale_menu = None
 
-        self.menu = AppKit.NSMenu.alloc().init()
-        self.menu.setDelegate_(self.menu_delegate)
-        self.rebuild_menu_items(self.menu)
-        self.status_item.setMenu_(self.menu)
+        self._build_menu()
 
-    def _create_item(self, title: str, callback: Optional[Any] = None) -> AppKit.NSMenuItem:
-        item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, None, "")
-        if callback:
-            target = MenuActionTarget.alloc().init()
-            target.callback = callback
-            self._targets.append(target)
-            item.setTarget_(target)
-            item.setAction_("onAction:")
-        return item
-
-    def update_menu(self) -> None:
-        """Trigger a manual refresh of the menu items."""
-        if hasattr(self, "menu") and self.menu:
-            self.rebuild_menu_items(self.menu)
-
-    def rebuild_menu_items(self, menu: AppKit.NSMenu) -> None:
-        """Populate menu items with up-to-date states."""
-        self._targets.clear()
-        menu.removeAllItems()
+    def _build_menu(self) -> None:
+        menu = AppKit.NSMenu.alloc().init()
         menu.setAutoenablesItems_(False)
 
-        # 1. Title / Header
-        char_name = self.engine.character.skin_id.replace("_", " ").title()
-        title_item = self._create_item(f"Buddy 2.0 — {char_name}")
-        title_item.setEnabled_(False)
-        menu.addItem_(title_item)
+        # 1. Title Header
+        cur_id = self.engine.character.skin_id
+        char_name = cur_id.replace("_", " ").title()
+        self.title_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            f"Buddy 2.0 — {char_name}", None, ""
+        )
+        self.title_item.setEnabled_(False)
+        menu.addItem_(self.title_item)
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
         # 2. Signature Move
-        sig_item = self._create_item("⚡ Perform Signature Move", lambda _: self.engine.trigger_signature_ability())
+        sig_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            "⚡ Perform Signature Move", "onSignatureMove:", ""
+        )
+        sig_item.setTarget_(self.controller)
         menu.addItem_(sig_item)
 
-        # 3. Current Skin Submenu
-        cur_skin = self.engine.character.skin_id
-        skin_sub_item = self._create_item(f"🎭 Switch Skin ({cur_skin.replace('_', ' ').title()})")
-        skin_menu = AppKit.NSMenu.alloc().init()
+        # Next Skin
+        next_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            "➡️ Next Companion (Scroll Wheel)", "onNextSkin:", ""
+        )
+        next_item.setTarget_(self.controller)
+        menu.addItem_(next_item)
+
+        menu.addItem_(AppKit.NSMenuItem.separatorItem())
+
+        # 3. Companion Selection Submenu
+        self.skin_sub_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            f"🎭 Switch Companion ({char_name})", None, ""
+        )
+        self.skin_menu = AppKit.NSMenu.alloc().init()
+        self.skin_menu.setAutoenablesItems_(False)
+
         for s in skin_manager.get_available_skins():
             sid = s["id"]
-            prefix = "✓ " if sid == cur_skin else "   "
             s_name = s.get("name", sid)
-            it = self._create_item(f"{prefix}{s_name}", lambda _, target_id=sid: self._switch_and_redraw(target_id))
-            skin_menu.addItem_(it)
-        skin_sub_item.setSubmenu_(skin_menu)
-        menu.addItem_(skin_sub_item)
+            it = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(s_name, "onSwitchSkin:", "")
+            it.setTarget_(self.controller)
+            it.setRepresentedObject_(sid)
+            if sid == cur_id:
+                it.setState_(AppKit.NSControlStateValueOn)
+            self.skin_menu.addItem_(it)
+
+        self.skin_sub_item.setSubmenu_(self.skin_menu)
+        menu.addItem_(self.skin_sub_item)
 
         # 4. Pomodoro Submenu
         pomo = getattr(self.engine, "pomodoro", None)
         if pomo:
-            pomo_sub_item = self._create_item(f"🍅 Pomodoro [{pomo.status_label}]")
+            self.pomo_sub_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                f"🍅 Pomodoro [{pomo.status_label}]", None, ""
+            )
             pomo_menu = AppKit.NSMenu.alloc().init()
+            pomo_menu.setAutoenablesItems_(False)
 
-            if pomo.state in (PomodoroState.WORK, PomodoroState.SHORT_BREAK, PomodoroState.LONG_BREAK):
-                t_item = self._create_item("⏸ Pause Focus Session", lambda _: pomo.pause())
-                pomo_menu.addItem_(t_item)
-            elif pomo.state == PomodoroState.PAUSED:
-                t_item = self._create_item("▶ Resume Focus Session", lambda _: pomo.resume())
-                pomo_menu.addItem_(t_item)
-            else:
-                t_item = self._create_item("▶ Start Focus Session (25 min)", lambda _: pomo.start_work())
-                pomo_menu.addItem_(t_item)
+            for title, act in [
+                ("▶ Start Focus Session (25 min)", "start"),
+                ("⏸ Pause Focus Session", "pause"),
+                ("▶ Resume Focus Session", "resume"),
+                ("⏭ Skip to Next Interval", "skip"),
+                ("⏹ Reset Timer", "reset"),
+            ]:
+                p_it = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, "onPomodoroAction:", "")
+                p_it.setTarget_(self.controller)
+                p_it.setRepresentedObject_(act)
+                pomo_menu.addItem_(p_it)
 
-            sk_item = self._create_item("⏭ Skip to Next Interval", lambda _: pomo.skip())
-            pomo_menu.addItem_(sk_item)
-
-            r_item = self._create_item("⏹ Reset Timer", lambda _: pomo.reset())
-            pomo_menu.addItem_(r_item)
-
-            pomo_sub_item.setSubmenu_(pomo_menu)
-            menu.addItem_(pomo_sub_item)
+            self.pomo_sub_item.setSubmenu_(pomo_menu)
+            menu.addItem_(self.pomo_sub_item)
 
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
-        # 5. Buddy Mode Submenu
-        mode_sub_item = self._create_item("⚙️ Companion Mode")
+        # 5. Companion Mode Submenu
+        mode_sub_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("⚙️ Companion Mode", None, "")
         mode_menu = AppKit.NSMenu.alloc().init()
+        mode_menu.setAutoenablesItems_(False)
 
-        ct_item = self._create_item(
-            f"{'✓ ' if self.engine.click_through else '   '}Click-Through Mode (Ghost)",
-            lambda _: self.engine.toggle_click_through()
+        ct_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            "Click-Through Mode (Ghost)", "onToggleClickThrough:", ""
         )
+        ct_item.setTarget_(self.controller)
+        ct_item.setState_(AppKit.NSControlStateValueOn if self.engine.click_through else AppKit.NSControlStateValueOff)
         mode_menu.addItem_(ct_item)
 
-        quiet_item = self._create_item(
-            f"{'✓ ' if not self.engine.audio.enabled else '   '}Quiet Mode (Mute)",
-            lambda _: self._toggle_sound(not self.engine.audio.enabled)
+        quiet_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            "Quiet Mode (Mute)", "onToggleMute:", ""
         )
+        quiet_item.setTarget_(self.controller)
+        quiet_item.setState_(AppKit.NSControlStateValueOff if self.engine.audio.enabled else AppKit.NSControlStateValueOn)
         mode_menu.addItem_(quiet_item)
 
         # Scale submenu
-        size_sub_item = self._create_item("Pet Scale")
-        size_menu = AppKit.NSMenu.alloc().init()
+        size_sub_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Pet Scale", None, "")
+        self.scale_menu = AppKit.NSMenu.alloc().init()
+        self.scale_menu.setAutoenablesItems_(False)
         cur_sc = getattr(self.engine.character, "scale", 1.0)
-        for label, sc in [("Small (75%)", 0.75), ("Medium (100%)", 1.0), ("Large (135%)", 1.35), ("Giant (175%)", 1.75)]:
-            chk = "✓ " if abs(cur_sc - sc) < 0.1 else "   "
-            s_item = self._create_item(f"{chk}{label}", lambda _, val=sc: self.engine.set_scale(val))
-            size_menu.addItem_(s_item)
-        size_sub_item.setSubmenu_(size_menu)
+        for label, sc in [("Small (75%)", 0.75), ("Normal (100%)", 1.0), ("Large (135%)", 1.35), ("Giant (175%)", 1.75)]:
+            s_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(label, "onSetScale:", "")
+            s_item.setTarget_(self.controller)
+            s_item.setRepresentedObject_(sc)
+            if abs(cur_sc - sc) < 0.1:
+                s_item.setState_(AppKit.NSControlStateValueOn)
+            self.scale_menu.addItem_(s_item)
+        size_sub_item.setSubmenu_(self.scale_menu)
         mode_menu.addItem_(size_sub_item)
 
         mode_sub_item.setSubmenu_(mode_menu)
@@ -175,48 +278,48 @@ class MacOSMenuBar:
 
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
-        # 6. Dialogs: Settings, Skin Gallery, Stats
-        settings_item = self._create_item("Preferences...", lambda _: self._open_settings())
-        menu.addItem_(settings_item)
+        # 6. Dialog Actions
+        pref_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Preferences...", "onPreferences:", "")
+        pref_item.setTarget_(self.controller)
+        menu.addItem_(pref_item)
 
-        gallery_item = self._create_item("Character Gallery...", lambda _: self._open_skin_selector())
-        menu.addItem_(gallery_item)
+        gal_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Character Gallery...", "onSkinGallery:", "")
+        gal_item.setTarget_(self.controller)
+        menu.addItem_(gal_item)
 
-        stats_item = self._create_item("Productivity Statistics...", lambda _: self._open_stats())
+        stats_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Productivity Statistics...", "onStats:", "")
+        stats_item.setTarget_(self.controller)
         menu.addItem_(stats_item)
 
-        help_item = self._create_item("Help & Controls...", lambda _: self._show_help())
+        help_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Help & Controls...", "onHelp:", "")
+        help_item.setTarget_(self.controller)
         menu.addItem_(help_item)
 
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
-        # 7. Quit Buddy
-        quit_item = self._create_item("Quit Buddy", lambda _: self._quit())
+        # 7. Quit
+        quit_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Quit Buddy", "onQuit:", "")
+        quit_item.setTarget_(self.controller)
         menu.addItem_(quit_item)
 
-    def _switch_and_redraw(self, skin_id: str) -> None:
-        self.engine.switch_skin(skin_id)
-        if hasattr(self.engine.window, "queue_draw"):
-            self.engine.window.queue_draw()
+        self.status_item.setMenu_(menu)
 
-    def _toggle_sound(self, enabled: bool) -> None:
-        self.engine.audio.enabled = enabled
-        self.engine.config.set("sound_enabled", enabled)
+    def update_skin_checkmarks(self, current_skin_id: str) -> None:
+        """Update native checkmarks without recreating the menu."""
+        char_name = current_skin_id.replace("_", " ").title()
+        if self.title_item:
+            self.title_item.setTitle_(f"Buddy 2.0 — {char_name}")
+        if self.skin_sub_item:
+            self.skin_sub_item.setTitle_(f"🎭 Switch Companion ({char_name})")
+        if self.skin_menu:
+            for it in self.skin_menu.itemArray():
+                sid = str(it.representedObject())
+                it.setState_(AppKit.NSControlStateValueOn if sid == current_skin_id else AppKit.NSControlStateValueOff)
 
-    def _open_settings(self) -> None:
-        AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
-        from ui.settings_dialog import show_settings_dialog
-        show_settings_dialog(self.engine)
-
-    def _open_skin_selector(self) -> None:
-        AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
-        from ui.skin_selector import show_skin_selector
-        show_skin_selector(self.engine)
-
-    def _open_stats(self) -> None:
-        AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
-        from ui.stats_dialog import show_stats_dialog
-        show_stats_dialog(self.engine)
+    def update_pomodoro_label(self) -> None:
+        pomo = getattr(self.engine, "pomodoro", None)
+        if pomo and self.pomo_sub_item:
+            self.pomo_sub_item.setTitle_(f"🍅 Pomodoro [{pomo.status_label}]")
 
     def _show_help(self) -> None:
         AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
@@ -238,6 +341,3 @@ class MacOSMenuBar:
         )
         alert.addButtonWithTitle_("OK")
         alert.runModal()
-
-    def _quit(self) -> None:
-        AppKit.NSApplication.sharedApplication().terminate_(None)

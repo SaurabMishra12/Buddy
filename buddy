@@ -99,6 +99,16 @@ def start_ipc_server(engine):
         from platforms import is_macos
         if is_macos():
             import threading
+            from Foundation import NSObject
+            class MainDispatcher(NSObject):
+                def runAction_(self, fn):
+                    try:
+                        fn()
+                    except Exception as e:
+                        print(f"[Buddy IPC] Error dispatching on main thread: {e}")
+
+            disp = MainDispatcher.alloc().init()
+
             def _macos_ipc_loop():
                 while True:
                     try:
@@ -106,7 +116,9 @@ def start_ipc_server(engine):
                         data = conn.recv(1024).decode("utf-8")
                         if data:
                             msg = json.loads(data)
-                            _handle_ipc_message(engine, msg)
+                            disp.performSelectorOnMainThread_withObject_waitUntilDone_(
+                                "runAction:", lambda m=msg: _handle_ipc_message(engine, m), False
+                            )
                         conn.close()
                     except Exception:
                         break
@@ -286,6 +298,7 @@ def main():
     engine = BuddyEngine(requested_skin=args.skin, debug_mode=args.debug)
     current_engine = engine
     tray = BuddyTray(engine)
+    engine.tray = tray
     start_ipc_server(engine)
 
     if args.pomodoro == "start":
