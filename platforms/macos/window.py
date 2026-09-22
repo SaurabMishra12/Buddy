@@ -123,7 +123,7 @@ class BuddyOverlayView(AppKit.NSView):
         local = self.convertPoint_fromView_(aPoint, None)
         dx = local.x - overlay.half_size
         dy = local.y - overlay.half_size
-        r = getattr(overlay, "hitbox_radius", 24.0)
+        r = getattr(overlay, "hitbox_radius", 36.0)
         if (dx * dx + dy * dy) <= (r * r):
             return self
         return None
@@ -724,7 +724,7 @@ class MacOSOverlayWindow(PlatformWindow):
             AppKit.NSWindowCollectionBehaviorFullScreenAuxiliary
         )
 
-        self.hitbox_radius = 24.0
+        self.hitbox_radius = 36.0
         self.click_through = False
         self._last_wx: Optional[int] = None
         self._last_wy: Optional[int] = None
@@ -733,11 +733,11 @@ class MacOSOverlayWindow(PlatformWindow):
         self.view.overlay_ref = self
         self.window.setContentView_(self.view)
 
-    def set_hitbox_mask(self, radius: float = 24.0) -> None:
+    def set_hitbox_mask(self, radius: float = 36.0) -> None:
         self.hitbox_radius = radius
 
     def set_scale(self, scale: float) -> None:
-        self.hitbox_radius = max(16.0, min(36.0, 24.0 * scale))
+        self.hitbox_radius = max(20.0, min(54.0, 36.0 * scale))
 
     def set_click_through(self, enabled: bool) -> None:
         self.click_through = enabled

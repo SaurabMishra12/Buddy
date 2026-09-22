@@ -340,4 +340,6 @@ class MacOSMenuBar:
             "  buddy --quit"
         )
         alert.addButtonWithTitle_("OK")
+        if hasattr(alert, "window") and alert.window():
+            alert.window().setLevel_(AppKit.NSFloatingWindowLevel)
         alert.runModal()

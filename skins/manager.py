@@ -36,11 +36,62 @@ BUILTIN_SKINS: Dict[str, Tuple[str, str]] = {
 }
 
 
+def _get_builtin_classes() -> Dict[str, Type[BaseCharacter]]:
+    """Statically import and map all 22 character classes for reliable execution and PyInstaller bundling."""
+    from skins.thor.character import ThorCharacter
+    from skins.dragon.character import DragonCharacter
+    from skins.cat.character import CatCharacter
+    from skins.dog.character import DogCharacter
+    from skins.hulk.character import HulkCharacter
+    from skins.ironman.character import IronManCharacter
+    from skins.harry_potter.character import HarryPotterCharacter
+    from skins.captain_america.character import CaptainAmericaCharacter
+    from skins.thanos.character import ThanosCharacter
+    from skins.batman.character import BatmanCharacter
+    from skins.superman.character import SupermanCharacter
+    from skins.spiderman.character import SpiderManCharacter
+    from skins.pixel_wizard.character import PixelWizardCharacter
+    from skins.space_robot.character import SpaceRobotCharacter
+    from skins.ninja.character import NinjaCharacter
+    from skins.vampire.character import VampireCharacter
+    from skins.fairy.character import FairyCharacter
+    from skins.alien.character import AlienCharacter
+    from skins.ghost.character import GhostCharacter
+    from skins.penguin.character import PenguinCharacter
+    from skins.fox.character import FoxCharacter
+    from skins.slime.character import SlimeCharacter
+
+    return {
+        "thor": ThorCharacter,
+        "dragon": DragonCharacter,
+        "cat": CatCharacter,
+        "dog": DogCharacter,
+        "hulk": HulkCharacter,
+        "ironman": IronManCharacter,
+        "harry_potter": HarryPotterCharacter,
+        "captain_america": CaptainAmericaCharacter,
+        "thanos": ThanosCharacter,
+        "batman": BatmanCharacter,
+        "superman": SupermanCharacter,
+        "spiderman": SpiderManCharacter,
+        "pixel_wizard": PixelWizardCharacter,
+        "space_robot": SpaceRobotCharacter,
+        "ninja": NinjaCharacter,
+        "vampire": VampireCharacter,
+        "fairy": FairyCharacter,
+        "alien": AlienCharacter,
+        "ghost": GhostCharacter,
+        "penguin": PenguinCharacter,
+        "fox": FoxCharacter,
+        "slime": SlimeCharacter,
+    }
+
+
 class SkinManager:
     """Discovers, validates, and registers modular character skins."""
 
     def __init__(self):
-        self._registry: Dict[str, Type[BaseCharacter]] = {}
+        self._registry: Dict[str, Type[BaseCharacter]] = _get_builtin_classes()
         self._metadata_cache: Dict[str, Dict[str, Any]] = {}
         self._populate_metadata()
 
@@ -147,25 +198,10 @@ class SkinManager:
     def create_character(self, skin_id: str, x: float = 500.0, y: float = 400.0) -> BaseCharacter:
         """Instantiate character for specified skin ID with fallback to Thor if missing."""
         norm_id = self.normalize_skin_id(skin_id)
-        if norm_id not in self._registry:
-            if norm_id in BUILTIN_SKINS:
-                try:
-                    import importlib
-                    mod_path, cls_name = BUILTIN_SKINS[norm_id]
-                    mod = importlib.import_module(mod_path)
-                    cls = getattr(mod, cls_name, None)
-                    if cls:
-                        self.register(norm_id, cls)
-                except Exception as e:
-                    print(f"[SkinManager] Error lazy importing {norm_id}: {e}")
-
-        cls = self._registry.get(norm_id)
+        cls = self._registry.get(norm_id) or self._registry.get("thor")
         if not cls:
-            # Fallback to thor character if target class unavailable
-            cls = self._registry.get("thor")
-            if not cls:
-                from skins.thor.character import ThorCharacter
-                return ThorCharacter(x, y)
+            from skins.thor.character import ThorCharacter
+            return ThorCharacter(x, y)
         return cls(x, y)
 
 

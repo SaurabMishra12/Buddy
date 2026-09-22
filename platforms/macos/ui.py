@@ -32,7 +32,7 @@ def _get_context_controller(engine: Any) -> MenuController:
 
 def show_macos_context_menu(engine: Any, event: Any) -> None:
     """Display native macOS popup context menu at mouse location with persistent MenuController."""
-    ctrl = _get_context_controller(engine)
+    ctrl = getattr(engine.tray, "controller", None) if hasattr(engine, "tray") and engine.tray else _get_context_controller(engine)
     menu = AppKit.NSMenu.alloc().init()
     menu.setAutoenablesItems_(False)
 
@@ -312,6 +312,7 @@ def show_macos_skin_selector(engine: Any, parent=None) -> None:
         frame, style, AppKit.NSBackingStoreBuffered, False
     )
     win.setTitle_("Buddy Companions — Character Gallery")
+    win.setLevel_(AppKit.NSFloatingWindowLevel)
     win.center()
     _active_dialogs.append(win)
 
@@ -530,8 +531,10 @@ def show_macos_skin_selector(engine: Any, parent=None) -> None:
     table_view.selectRowIndexes_byExtendingSelection_(AppKit.NSIndexSet.indexSetWithIndex_(initial_idx), False)
     update_card()
 
+    win.center()
     win.makeKeyAndOrderFront_(None)
     win.orderFrontRegardless()
+    AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
 
 
 # ============================================================================
@@ -554,6 +557,7 @@ def show_macos_settings_dialog(engine: Any, parent=None) -> None:
         frame, style, AppKit.NSBackingStoreBuffered, False
     )
     win.setTitle_("Buddy Preferences")
+    win.setLevel_(AppKit.NSFloatingWindowLevel)
     win.center()
     _active_dialogs.append(win)
 
@@ -706,8 +710,10 @@ def show_macos_settings_dialog(engine: Any, parent=None) -> None:
     btn_save.setAction_("onSave:")
     backdrop.addSubview_(btn_save)
 
+    win.center()
     win.makeKeyAndOrderFront_(None)
     win.orderFrontRegardless()
+    AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
 
 
 # ============================================================================
@@ -731,6 +737,7 @@ def show_macos_stats_dialog(engine: Any, parent=None) -> None:
         frame, style, AppKit.NSBackingStoreBuffered, False
     )
     win.setTitle_("Productivity Statistics")
+    win.setLevel_(AppKit.NSFloatingWindowLevel)
     win.center()
     _active_dialogs.append(win)
 
@@ -800,5 +807,7 @@ def show_macos_stats_dialog(engine: Any, parent=None) -> None:
     btn_done.setAction_("onClose:")
     backdrop.addSubview_(btn_done)
 
+    win.center()
     win.makeKeyAndOrderFront_(None)
     win.orderFrontRegardless()
+    AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)

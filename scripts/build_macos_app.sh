@@ -55,6 +55,12 @@ pyinstaller \
     --icon "${ICON_PATH}" \
     --osx-bundle-identifier "${BUNDLE_ID}" \
     --add-data "assets:assets" \
+    --add-data "skins:skins" \
+    --collect-all "skins" \
+    --collect-all "platforms" \
+    --collect-all "pomodoro" \
+    --collect-all "core" \
+    --collect-all "ui" \
     --hidden-import "AppKit" \
     --hidden-import "Foundation" \
     --hidden-import "Quartz" \
