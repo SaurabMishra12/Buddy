@@ -17,8 +17,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# Enforce X11 backend for XWayland cursor polling and input shape transparency
-os.environ["GDK_BACKEND"] = "x11"
+# Enforce X11 backend for XWayland on Linux cursor polling and input shape transparency
+if sys.platform != "darwin":
+    os.environ["GDK_BACKEND"] = "x11"
 os.environ["PYTHONUNBUFFERED"] = "1"
 
 from core.config import config, CACHE_DIR
@@ -46,8 +47,47 @@ def send_daemon_command(cmd: dict) -> bool:
         return False
 
 
+def _handle_ipc_message(engine, msg: dict):
+    action = msg.get("action")
+    if action == "pause":
+        engine.paused = True
+    elif action == "resume":
+        engine.paused = False
+    elif action == "toggle_pause":
+        engine.toggle_pause()
+    elif action == "switch_skin":
+        skin_id = msg.get("skin_id")
+        if skin_id:
+            engine.switch_skin(skin_id)
+    elif action == "settings":
+        from ui.settings_dialog import show_settings_dialog
+        show_settings_dialog(engine)
+    elif action in ("skins", "skin_gallery"):
+        from ui.skin_selector import show_skin_selector
+        show_skin_selector(engine)
+    elif action == "stats":
+        from ui.stats_dialog import show_stats_dialog
+        show_stats_dialog(engine)
+    elif action == "pomodoro":
+        sub = msg.get("sub", "start")
+        pomo = getattr(engine, "pomodoro", None)
+        if pomo:
+            if sub == "start":
+                pomo.start_work()
+            elif sub == "pause":
+                pomo.pause()
+            elif sub == "resume":
+                pomo.resume()
+            elif sub == "reset":
+                pomo.reset()
+            elif sub == "skip":
+                pomo.skip()
+    elif action == "quit":
+        engine.quit()
+
+
 def start_ipc_server(engine):
-    """Start local Unix socket listener in GLib main loop to receive CLI commands."""
+    """Start local Unix socket listener to receive CLI commands."""
     try:
         if SOCKET_FILE.exists():
             SOCKET_FILE.unlink()
@@ -55,63 +95,42 @@ def start_ipc_server(engine):
         server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         server.bind(str(SOCKET_FILE))
         server.listen(5)
-        server.setblocking(False)
 
-        import gi
-        gi.require_version("GLib", "2.0")
-        from gi.repository import GLib
+        from platforms import is_macos
+        if is_macos():
+            import threading
+            def _macos_ipc_loop():
+                while True:
+                    try:
+                        conn, _ = server.accept()
+                        data = conn.recv(1024).decode("utf-8")
+                        if data:
+                            msg = json.loads(data)
+                            _handle_ipc_message(engine, msg)
+                        conn.close()
+                    except Exception:
+                        break
+            t = threading.Thread(target=_macos_ipc_loop, daemon=True)
+            t.start()
+        else:
+            server.setblocking(False)
+            import gi
+            gi.require_version("GLib", "2.0")
+            from gi.repository import GLib
 
-        def on_socket_readable(source, condition):
-            try:
-                conn, _ = server.accept()
-                data = conn.recv(1024).decode("utf-8")
-                if data:
-                    msg = json.loads(data)
-                    action = msg.get("action")
-                    if action == "pause":
-                        engine.paused = True
-                    elif action == "resume":
-                        engine.paused = False
-                    elif action == "toggle_pause":
-                        engine.toggle_pause()
-                    elif action == "switch_skin":
-                        skin_id = msg.get("skin_id")
-                        if skin_id:
-                            engine.switch_skin(skin_id)
-                    elif action == "settings":
-                        from ui.settings_dialog import show_settings_dialog
-                        show_settings_dialog(engine)
-                    elif action in ("skins", "skin_gallery"):
-                        from ui.skin_selector import show_skin_selector
-                        show_skin_selector(engine)
-                    elif action == "stats":
-                        from ui.stats_dialog import show_stats_dialog
-                        show_stats_dialog(engine)
-                    elif action == "pomodoro":
-                        sub = msg.get("sub", "start")
-                        pomo = getattr(engine, "pomodoro", None)
-                        if pomo:
-                            if sub == "start":
-                                pomo.start_work()
-                            elif sub == "pause":
-                                pomo.pause()
-                            elif sub == "resume":
-                                pomo.resume()
-                            elif sub == "reset":
-                                pomo.reset()
-                            elif sub == "skip":
-                                pomo.skip()
-                    elif action == "quit":
-                        import gi
-                        gi.require_version("Gtk", "3.0")
-                        from gi.repository import Gtk
-                        Gtk.main_quit()
-                conn.close()
-            except Exception:
-                pass
-            return True
+            def on_socket_readable(source, condition):
+                try:
+                    conn, _ = server.accept()
+                    data = conn.recv(1024).decode("utf-8")
+                    if data:
+                        msg = json.loads(data)
+                        _handle_ipc_message(engine, msg)
+                    conn.close()
+                except Exception:
+                    pass
+                return True
 
-        GLib.io_add_watch(server.fileno(), GLib.IO_IN, on_socket_readable)
+            GLib.io_add_watch(server.fileno(), GLib.IO_IN, on_socket_readable)
     except Exception as e:
         print(f"[Buddy IPC] Warning: Could not initialize control socket: {e}")
 
@@ -133,7 +152,9 @@ def main():
     args = parser.parse_args()
 
     if args.version:
-        print(f"Buddy Desktop Companion v{VERSION} (Linux/Fedora/GNOME/KDE)")
+        from platforms import is_macos
+        plat_label = "macOS (Cocoa/AppKit)" if is_macos() else "Linux (Fedora/GNOME/KDE/X11/Wayland)"
+        print(f"Buddy Desktop Companion v{VERSION} ({plat_label})")
         return
 
     if args.list_skins:
@@ -238,14 +259,15 @@ def main():
             except Exception:
                 pass
 
+    current_engine = None
+
     def signal_handler(sig, frame):
         print("\nBuddy says goodbye! Exiting gracefully...", flush=True)
         _cleanup_files()
-        import gi
-        gi.require_version("Gtk", "3.0")
-        from gi.repository import Gtk
-        if Gtk.main_level() > 0:
-            Gtk.main_quit()
+        if current_engine:
+            current_engine.quit()
+        else:
+            sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
@@ -262,6 +284,7 @@ def main():
         pass
 
     engine = BuddyEngine(requested_skin=args.skin, debug_mode=args.debug)
+    current_engine = engine
     tray = BuddyTray(engine)
     start_ipc_server(engine)
 

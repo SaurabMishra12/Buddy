@@ -20,6 +20,12 @@ Buddy Desktop Platform Engine
 │   ├── config.py       # Configuration schema and ~/.config/buddy/config.json persistence
 │   └── tray.py         # AppIndicator3 system tray menu
 │
+├── platforms/
+│   ├── __init__.py     # Platform detection (is_macos, is_linux, get_platform_name)
+│   ├── base.py         # Abstract contracts (PlatformWindow, PlatformTray, PlatformAudio, PlatformAutostart)
+│   ├── linux/          # Native Linux GTK3, GDK, AppIndicator3, XDG desktop implementation
+│   └── macos/          # Native macOS AppKit, PyObjC, Quartz, NSSound, LaunchAgent implementation
+│
 ├── behavior/
 │   ├── personality.py  # CharacterPersonality profile (energy, curiosity, playfulness, sleepiness)
 │   ├── state_machine.py# CharacterBehavior autonomous state machine (Focus, Break, Walk, Play, Idle)
@@ -28,7 +34,7 @@ Buddy Desktop Platform Engine
 ├── pomodoro/
 │   ├── manager.py      # PomodoroManager state machine (work, short break, long break, countdown)
 │   ├── statistics.py   # PomodoroStats daily/weekly/streak metrics (~/.config/buddy/pomodoro_stats.json)
-│   └── notifications.py# Desktop notification dispatcher (DBus / notify-send)
+│   └── notifications.py# Desktop notification dispatcher (DBus / notify-send / AppleScript)
 │
 ├── rendering/
 │   └── animation.py    # Easing primitives: bounce, elastic, ease_in, ease_out, spring_step
@@ -70,7 +76,7 @@ Buddy Desktop Platform Engine
 
 ## 🔬 Physics & Simulation Loop
 
-1. **Input Polling**: Queries the root pointer position from the GDK default seat at each frame interval (16.6ms for 60 FPS).
+1. **Input Polling**: Queries the root pointer position from native windowing system (AppKit on macOS, GDK default seat on Linux) at each frame interval (16.6ms for 60 FPS).
 2. **Pomodoro Synchronization**:
    - Updates countdown timer on every tick (`self.pomodoro.tick(dt)`).
    - Injects Pomodoro state (`WORK`, `SHORT_BREAK`, `LONG_BREAK`, `PAUSED`) into character behavior engine.
@@ -82,6 +88,7 @@ Buddy Desktop Platform Engine
 5. **Window Draw Event**:
    - `cairo.OPERATOR_CLEAR` wipes previous frame for transparent background.
    - `cairo.OPERATOR_OVER` renders character, projectiles, and particle effects.
+   - On macOS: in-memory zero-copy buffer transfer to CGImage (`~0.060 ms/frame`).
    - Optionally renders the floating Pomodoro pill badge and developer telemetry HUD.
 
 ---
@@ -107,5 +114,21 @@ The HUD displays:
 Run the full automated test suite anytime during development:
 
 ```bash
+# Using pytest (Recommended)
+pytest -v tests/
+
+# Using unittest runner
 python3 -m unittest discover -s tests -p "test_*.py" -v
+```
+
+### Running macOS Platform-Specific Tests
+
+```bash
+pytest -v tests/test_macos_platform.py tests/test_macos_integration_and_stress.py
+```
+
+### Building Standalone App Bundle
+
+```bash
+./scripts/build_macos_app.sh
 ```

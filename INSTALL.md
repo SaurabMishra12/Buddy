@@ -1,6 +1,39 @@
 # 📦 Buddy Installation Guide
 
-This guide covers installing Buddy on **Fedora Linux** and other major Linux distributions.
+This guide covers installing Buddy on **macOS (Apple Silicon & Intel)**, **Fedora Linux**, and other major Linux distributions.
+
+---
+
+## 🍏 macOS (Apple Silicon & Intel)
+
+Buddy features native AppKit & PyObjC desktop integration on macOS without requiring X11, XQuartz, or GTK.
+
+### 1. Prerequisites (Homebrew)
+
+```bash
+brew install python3
+```
+
+### 2. Automated Installer
+
+```bash
+cd /path/to/buddy
+./scripts/install_macos.sh
+```
+
+The script verifies required packages (`pycairo`, `pyobjc-framework-Cocoa`, `pyobjc-framework-Quartz`), configures `~/Library/Application Support/Buddy`, and links the `buddy` command into `~/.local/bin/buddy`.
+
+### 3. Standalone Application Bundle (`Buddy.app`)
+
+To build and install a standalone `.app` into `/Applications`:
+
+```bash
+./scripts/build_macos_app.sh
+cp -R dist/Buddy.app /Applications/
+open /Applications/Buddy.app
+```
+
+For complete details, architecture, and gestures, see [MACOS.md](MACOS.md).
 
 ---
 

@@ -1,0 +1,92 @@
+name: Cross-Platform CI (Linux & macOS)
+
+on:
+  push:
+    branches: [ main, master, feat/* ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-linux:
+    name: Linux (Ubuntu ${{ matrix.os-version }}) - Python ${{ matrix.python-version }}
+    runs-on: ubuntu-${{ matrix.os-version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os-version: ['22.04', '24.04']
+        python-version: ['3.10', '3.11', '3.12']
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-gi \
+            python3-gi-cairo \
+            gir1.2-gtk-3.0 \
+            gir1.2-appindicator3-0.1 \
+            libcairo2-dev \
+            pkg-config \
+            python3-dev \
+            xvfb
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pycairo pytest
+
+      - name: Run Test Suite under Xvfb
+        run: |
+          xvfb-run -a pytest -v tests/
+
+      - name: Verify Linux CLI
+        run: |
+          ./buddy --version
+          ./buddy --list-skins
+
+  test-macos:
+    name: macOS (${{ matrix.os }}) - Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-13, macos-14]
+        python-version: ['3.11', '3.12']
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install macOS native dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pycairo pyobjc-core pyobjc-framework-Cocoa pyobjc-framework-Quartz pytest pyinstaller
+
+      - name: Run Full Test Suite on macOS
+        run: |
+          pytest -v tests/
+
+      - name: Test macOS CLI
+        run: |
+          ./buddy --version
+          ./buddy --list-skins
+
+      - name: Test Standalone App Builder
+        run: |
+          chmod +x scripts/build_macos_app.sh
+          ./scripts/build_macos_app.sh
+          test -d "dist/Buddy.app"
+          test -f "dist/Buddy.app/Contents/Info.plist"

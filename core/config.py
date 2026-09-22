@@ -5,10 +5,29 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-CONFIG_DIR = Path.home() / ".config" / "buddy"
-CONFIG_FILE = CONFIG_DIR / "config.json"
-CACHE_DIR = Path.home() / ".cache" / "buddy"
-USER_SKINS_DIR = CONFIG_DIR / "skins"
+import sys
+from platforms import is_macos
+
+if is_macos():
+    CONFIG_DIR = Path.home() / "Library" / "Application Support" / "Buddy"
+    CONFIG_FILE = CONFIG_DIR / "config.json"
+    CACHE_DIR = Path.home() / "Library" / "Caches" / "Buddy"
+    USER_SKINS_DIR = CONFIG_DIR / "skins"
+    # Migration helper: If user previously ran Linux configuration on Mac
+    _legacy_cfg = Path.home() / ".config" / "buddy" / "config.json"
+    if _legacy_cfg.exists() and not CONFIG_FILE.exists():
+        try:
+            CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            import shutil
+            shutil.copy2(str(_legacy_cfg), str(CONFIG_FILE))
+        except Exception:
+            pass
+else:
+    CONFIG_DIR = Path.home() / ".config" / "buddy"
+    CONFIG_FILE = CONFIG_DIR / "config.json"
+    CACHE_DIR = Path.home() / ".cache" / "buddy"
+    USER_SKINS_DIR = CONFIG_DIR / "skins"
+
 
 DEFAULT_CONFIG: Dict[str, Any] = {
     "skin": "thor",

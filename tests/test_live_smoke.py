@@ -13,15 +13,20 @@ if str(PROJECT_ROOT) not in sys.path:
 # Ensure X11 backend
 os.environ["GDK_BACKEND"] = "x11"
 
-import gi
-gi.require_version("Gtk", "3.0")
-gi.require_version("GLib", "2.0")
-from gi.repository import Gtk, GLib
+try:
+    import gi
+    gi.require_version("Gtk", "3.0")
+    gi.require_version("GLib", "2.0")
+    from gi.repository import Gtk, GLib
+    HAS_GI = True
+except (ImportError, ValueError):
+    HAS_GI = False
 
 from core.engine import BuddyEngine
 from skins.manager import skin_manager
 
 
+@unittest.skipUnless(HAS_GI, "GTK/GLib (Linux) required")
 class TestLiveDisplaySmoke(unittest.TestCase):
     def test_engine_run_and_skin_switch(self):
         # Instantiate engine

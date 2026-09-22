@@ -1,17 +1,18 @@
-# ⚡ Buddy 2.0 — Your Linux Desktop Companion & Productivity Platform
+# ⚡ Buddy 2.0 — Cross-Platform Desktop Companion & Productivity Assistant
 
-[![Platform](https://img.shields.io/badge/Platform-Fedora%20%7C%20Ubuntu%20%7C%20Arch%20%7C%20Linux-blue)](https://getfedora.org/)
-[![Desktop](https://img.shields.io/badge/Desktop-GNOME%20%7C%20KDE%20%7C%20Wayland%20%7C%20X11-green)](https://www.gnu.org/)
+[![Platform: Linux](https://img.shields.io/badge/Linux-Fedora%20%7C%20Ubuntu%20%7C%20Arch-blue)](https://getfedora.org/)
+[![Platform: macOS](https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-black?logo=apple)](MACOS.md)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-yellow)](https://www.python.org/)
+[![CI](https://github.com/SaurabMishra12/Buddy/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-purple.svg)](LICENSE)
 
-**Buddy 2.0** transforms the traditional Linux desktop pet into an intelligent, autonomous **desktop companion platform**. Built natively for **Fedora Linux**, GNOME, KDE Plasma, Wayland, and X11 using Python 3, PyGObject, and Cairo 2D vector graphics, Buddy combines:
+**Buddy 2.0** transforms the traditional desktop pet into an intelligent, autonomous **desktop companion platform**. Built natively for both **macOS (AppKit / PyObjC / Retina)** and **Linux (Fedora, GNOME, KDE, Wayland, X11)** using Python 3 and Cairo 2D vector graphics, Buddy combines:
 
 ```text
 Desktop Pet + Character Simulator + Pomodoro Productivity Companion + Extensible Skin Platform
 ```
 
-Buddy feels alive even when idle. Each companion boasts a distinct personality, autonomous behavioral engine, state machine, local memory, signature abilities, and deep Pomodoro focus/break reactions.
+Buddy feels alive even when idle. Each companion boasts a distinct personality, autonomous behavioral engine, state machine, local memory, signature abilities, and deep Pomodoro focus/break reactions. All platforms use 100% native windowing (no XQuartz or web wrappers on macOS; native GTK3/GDK on Linux).
 
 ---
 
@@ -59,8 +60,16 @@ Buddy 2.0 features **22 distinct characters** across Heroes, Animals, Fantasy, S
 ```bash
 git clone https://github.com/SaurabMishra12/Buddy.git
 cd Buddy
+
+# On Linux (Fedora / Ubuntu / Arch):
 ./install.sh
+
+# On macOS (Apple Silicon & Intel):
+./scripts/install_macos.sh
+# (Or build standalone Buddy.app: ./scripts/build_macos_app.sh)
 ```
+
+See [INSTALL.md](INSTALL.md) for distro-specific packages and [MACOS.md](MACOS.md) for the complete macOS guide.
 
 ### Launching Buddy 2.0
 

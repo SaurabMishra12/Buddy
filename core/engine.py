@@ -6,10 +6,14 @@ import random
 import cairo
 from typing import Optional, Dict, Any
 
-import gi
-gi.require_version("Gtk", "3.0")
-gi.require_version("Gdk", "3.0")
-from gi.repository import Gtk, Gdk, GLib
+from platforms import is_macos
+
+if not is_macos():
+    import gi
+    gi.require_version("Gtk", "3.0")
+    gi.require_version("Gdk", "3.0")
+    from gi.repository import Gtk, Gdk, GLib
+
 
 from core.config import config
 from core.window import OverlayWindow
@@ -21,8 +25,19 @@ from skins.base import BaseCharacter, CharacterState
 from pomodoro.manager import PomodoroManager, PomodoroState
 
 
+if is_macos():
+    from Foundation import NSObject, NSTimer, NSRunLoop, NSRunLoopCommonModes
+
+    class EngineTimerTarget(NSObject):
+        def onTick_(self, timer):
+            if hasattr(self, "_engine") and self._engine:
+                self._engine.on_tick()
+
+
+
 class BuddyEngine:
     """Coordinates lifecycle, animation pacing, input routing, and rendering for Buddy."""
+
 
     def __init__(self, requested_skin: Optional[str] = None, debug_mode: bool = False, config: Optional[Any] = None):
         self.config = config if config is not None else globals()["config"]
@@ -102,7 +117,19 @@ class BuddyEngine:
 
         # Show window & start main animation tick
         self.window.show()
-        GLib.timeout_add(self.frame_interval_ms, self.on_tick)
+        if is_macos():
+            self._timer_target = EngineTimerTarget.alloc().init()
+            self._timer_target._engine = self
+            interval = max(0.001, self.frame_interval_ms / 1000.0)
+
+            self._timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+                interval, self._timer_target, "onTick:", None, True
+            )
+            NSRunLoop.currentRunLoop().addTimer_forMode_(self._timer, NSRunLoopCommonModes)
+        else:
+            GLib.timeout_add(self.frame_interval_ms, self.on_tick)
+
+
 
     def switch_skin(self, skin_id: str) -> bool:
         """Dynamically switch to a different character with character-specific fanfare."""
@@ -686,14 +713,14 @@ class BuddyEngine:
         ctx.show_text(f"POMO:{self.pomodoro.state[:5]} {self.pomodoro.remaining_formatted}")
         ctx.restore()
 
-    def on_button_press(self, widget: Gtk.Widget, event: Gdk.EventButton) -> bool:
+    def on_button_press(self, widget: Any, event: Any) -> bool:
         """Handle mouse click on pet."""
         click_dist = math.hypot(event.x - self.window.half_size, event.y - self.window.half_size)
         if click_dist > 54.0:
             return False
 
         # 1. Double-click: signature ability move & spin
-        double_click_type = getattr(Gdk.EventType, "_2BUTTON_PRESS", 5)
+        double_click_type = 5 if is_macos() else getattr(Gdk.EventType, "_2BUTTON_PRESS", 5)
         if event.type == double_click_type:
             self.trigger_signature_ability()
             return True
@@ -745,7 +772,7 @@ class BuddyEngine:
 
         return False
 
-    def on_button_release(self, widget: Gtk.Widget, event: Gdk.EventButton) -> bool:
+    def on_button_release(self, widget: Any, event: Any) -> bool:
         if event.button == 1:
             was_dragging = self.is_dragging
             self.is_dragging = False
@@ -767,7 +794,7 @@ class BuddyEngine:
             return True
         return False
 
-    def on_motion(self, widget: Gtk.Widget, event: Gdk.EventMotion) -> bool:
+    def on_motion(self, widget: Any, event: Any) -> bool:
         """Update global cursor coordinates during mouse motion."""
         try:
             px, py = self.window.query_pointer()
@@ -778,17 +805,34 @@ class BuddyEngine:
             pass
         return False
 
-    def on_scroll(self, widget: Gtk.Widget, event: Gdk.EventScroll) -> bool:
+    def on_scroll(self, widget: Any, event: Any) -> bool:
         """Cycle character skins using mouse scroll wheel directly over pet."""
-        if event.direction == Gdk.ScrollDirection.UP:
+        dir_val = getattr(event, "direction", None)
+        is_up = dir_val == 0 or (not is_macos() and hasattr(Gdk, "ScrollDirection") and dir_val == Gdk.ScrollDirection.UP)
+        is_down = dir_val == 1 or (not is_macos() and hasattr(Gdk, "ScrollDirection") and dir_val == Gdk.ScrollDirection.DOWN)
+        if is_up:
             self.prev_skin()
             return True
-        elif event.direction == Gdk.ScrollDirection.DOWN:
+        elif is_down:
             self.next_skin()
             return True
         return False
 
     def run(self) -> None:
-        """Start the GTK main loop."""
+        """Start the native desktop event loop."""
         self.window.show()
-        Gtk.main()
+        if is_macos():
+            import AppKit
+            AppKit.NSApplication.sharedApplication().run()
+        else:
+            Gtk.main()
+
+    def quit(self) -> None:
+        """Gracefully terminate active event loop."""
+        if is_macos():
+            import AppKit
+            AppKit.NSApplication.sharedApplication().terminate_(None)
+        else:
+            if Gtk.main_level() > 0:
+                Gtk.main_quit()
+

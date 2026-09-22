@@ -11,15 +11,20 @@ if str(PROJECT_ROOT) not in sys.path:
 
 os.environ["GDK_BACKEND"] = "x11"
 
-import gi
-gi.require_version("Gtk", "3.0")
-gi.require_version("Gdk", "3.0")
-from gi.repository import Gtk, Gdk
+try:
+    import gi
+    gi.require_version("Gtk", "3.0")
+    gi.require_version("Gdk", "3.0")
+    from gi.repository import Gtk, Gdk
+    HAS_GI = True
+except (ImportError, ValueError):
+    HAS_GI = False
 
 from core.window import OverlayWindow, WIN_SIZE, HALF_SIZE
 from core.engine import BuddyEngine
 
 
+@unittest.skipUnless(HAS_GI, "GTK/GDK (Linux) required")
 class TestInteractiveWindow(unittest.TestCase):
     def setUp(self):
         self.engine = BuddyEngine(requested_skin="thor")

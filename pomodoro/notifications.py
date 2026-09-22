@@ -17,7 +17,20 @@ class NotificationManager:
         if not self.enabled:
             return False
 
+        from platforms import is_macos
+        if is_macos():
+            try:
+                # Sanitize single quotes to prevent AppleScript injection
+                clean_title = title.replace('"', '\\"')
+                clean_msg = message.replace('"', '\\"')
+                script = f'display notification "{clean_msg}" with title "{clean_title}"'
+                subprocess.run(["osascript", "-e", script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
+                return True
+            except Exception:
+                return False
+
         # Prefer native GI Notify first (native DBus, zero process fork overhead)
+
         try:
             import gi
             gi.require_version("Notify", "0.7")
