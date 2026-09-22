@@ -15,7 +15,8 @@ class DesktopLedge:
         width: float,
         height: float = 4.0,
         ledge_type: str = "window",  # "window", "panel", "button", "ground"
-        title: str = ""
+        title: str = "",
+        is_real: bool = True
     ):
         self.x = float(x)
         self.y = float(y)
@@ -23,6 +24,7 @@ class DesktopLedge:
         self.height = float(max(2.0, height))
         self.ledge_type = ledge_type
         self.title = title
+        self.is_real = is_real
 
     @property
     def left(self) -> float:
@@ -59,12 +61,22 @@ class PlatformManager:
         self.scan_interval = 4.0  # seconds between full desktop window queries
         self._atspi_available = True
 
+    def is_real_surface(self, ledge: Optional[DesktopLedge]) -> bool:
+        """Check if a ledge represents a verified visible physical surface (panel, real window, etc.)."""
+        if not ledge:
+            return False
+        if not getattr(ledge, "is_real", True):
+            return False
+        if getattr(ledge, "title", "") in ("Workspace Window", "Window Controls"):
+            return False
+        return True
+
     def scan_desktop_windows(self, screen_bounds: Tuple[int, int, int, int]) -> None:
         """Scan desktop for open application windows, top panels, and buttons."""
         min_x, min_y, screen_w, screen_h = screen_bounds
         discovered: List[DesktopLedge] = []
 
-        # 1. System top panel (GNOME Shell / KDE status bar)
+        # 1. System top panel (GNOME Shell / KDE status bar) - always genuine physical surface
         top_bar_h = 32.0
         discovered.append(DesktopLedge(
             x=min_x,
@@ -72,7 +84,8 @@ class PlatformManager:
             width=screen_w,
             height=4.0,
             ledge_type="panel",
-            title="System Panel"
+            title="System Panel",
+            is_real=True
         ))
 
         # 2. AT-SPI real accessibility windows and buttons query if enabled
@@ -91,8 +104,8 @@ class PlatformManager:
                         if not app:
                             continue
                         app_name = app.get_name() or ""
-                        # Skip desktop pet overlay itself
-                        if "buddy" in app_name.lower():
+                        # Skip desktop pet overlays, daemons, and helper processes
+                        if any(pet in app_name.lower() for pet in ("buddy", "oneko", "mjolnir", "desktop-pet", "evolution", "ibus")):
                             continue
 
                         n_wins = min(6, app.get_child_count())
@@ -104,7 +117,8 @@ class PlatformManager:
                                 comp = child.get_component_iface()
                                 if comp:
                                     rect = comp.get_extents(Atspi.CoordType.SCREEN)
-                                    if rect.width > 120 and rect.height > 80:
+                                    # Filter out unpositioned (0,0), off-screen, or tiny pet/icon overlays
+                                    if rect.width >= 280 and rect.height >= 180 and rect.y >= 20 and rect.y < screen_h - 100:
                                         # Window top titlebar ledge
                                         atspi_discovered.append(DesktopLedge(
                                             x=rect.x,
@@ -112,7 +126,8 @@ class PlatformManager:
                                             width=rect.width,
                                             height=26.0,
                                             ledge_type="window",
-                                            title=child.get_name() or app_name
+                                            title=child.get_name() or app_name,
+                                            is_real=True
                                         ))
                                         # Window buttons (top right corner)
                                         atspi_discovered.append(DesktopLedge(
@@ -121,7 +136,8 @@ class PlatformManager:
                                             width=80.0,
                                             height=20.0,
                                             ledge_type="button",
-                                            title=f"{app_name} Buttons"
+                                            title=f"{app_name} Buttons",
+                                            is_real=True
                                         ))
                             except Exception:
                                 pass
@@ -132,6 +148,7 @@ class PlatformManager:
             discovered.extend(atspi_discovered)
         else:
             # Fallback typical workspace window frames when no AT-SPI windows are detected (e.g. headless tests)
+            # Marked as is_real=False so characters know it is a phantom ledge and will not sit in mid-air on it
             w1_x = min_x + max(60.0, screen_w * 0.12)
             w1_y = min_y + max(100.0, screen_h * 0.18)
             w1_w = min(1200.0, screen_w * 0.76)
@@ -141,7 +158,8 @@ class PlatformManager:
                 width=w1_w,
                 height=30.0,
                 ledge_type="window",
-                title="Workspace Window"
+                title="Workspace Window",
+                is_real=False
             ))
             discovered.append(DesktopLedge(
                 x=w1_x + w1_w - 95.0,
@@ -149,7 +167,8 @@ class PlatformManager:
                 width=90.0,
                 height=22.0,
                 ledge_type="button",
-                title="Window Controls"
+                title="Window Controls",
+                is_real=False
             ))
 
         self.ledges = discovered
@@ -165,13 +184,16 @@ class PlatformManager:
         self,
         px: float,
         py: float,
-        max_dist: float = 120.0
+        max_dist: float = 120.0,
+        require_real: bool = False
     ) -> Optional[DesktopLedge]:
         """Find the closest platform or window ledge to coordinates."""
         best_ledge: Optional[DesktopLedge] = None
         best_dist = float("inf")
 
         for ledge in self.ledges + self.dynamic_ledges:
+            if require_real and not self.is_real_surface(ledge):
+                continue
             # Check if x is within ledge span with margin
             if ledge.contains_x(px, margin=24.0):
                 d = abs(py - ledge.top)
@@ -185,10 +207,13 @@ class PlatformManager:
         self,
         px: float,
         py: float,
-        tolerance: float = 12.0
+        tolerance: float = 12.0,
+        require_real: bool = False
     ) -> Optional[DesktopLedge]:
         """Determine if character feet or body is resting on a window ledge or button."""
         for ledge in self.ledges + self.dynamic_ledges:
+            if require_real and not self.is_real_surface(ledge):
+                continue
             if ledge.contains_x(px, margin=16.0):
                 if abs(py - ledge.top) <= tolerance:
                     return ledge
@@ -203,7 +228,8 @@ class PlatformManager:
             width=280.0,
             height=24.0,
             ledge_type="window",
-            title="User Window Point"
+            title="User Window Point",
+            is_real=True
         )
         setattr(ledge, "created_at", time.time())
         self.dynamic_ledges.append(ledge)

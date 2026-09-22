@@ -66,6 +66,12 @@ class SpiderManCharacter(BaseCharacter):
         self.web_target_x = x + 120.0
         self.web_target_y = y
 
+        # Swing attack and web strike tracking
+        self.is_swing_attacking = False
+        self.attack_target_x = 0.0
+        self.attack_target_y = 0.0
+        self.attack_timer = 0.0
+
         # Dedicated screen-spanning web rope overlay for full unclipped swinging/hanging
         self.rope_window: Optional[WebRopeWindow] = None
 
@@ -73,21 +79,24 @@ class SpiderManCharacter(BaseCharacter):
         if self.rope_window is None:
             try:
                 def get_hand_pos():
-                    if not (self.is_swinging or self.is_hanging_upside_down):
+                    if not (self.is_swinging or self.is_hanging_upside_down or self.is_swing_attacking):
                         return (self.x, self.y)
                     if self.is_hanging_upside_down:
                         return (self.x, self.y + 15.0)
+                    elif self.is_swing_attacking:
+                        dir_mult = 1.0 if self.facing_right else -1.0
+                        return (self.x + dir_mult * 24.0, self.y - 6.0)
                     else:
                         dir_mult = 1.0 if self.facing_right else -1.0
                         return (self.x + dir_mult * 8.0, self.y - 16.0)
 
                 def get_anchor_pos():
-                    if not (self.is_swinging or self.is_hanging_upside_down):
-                        return (self.anchor_x, self.anchor_y)
+                    if self.is_swing_attacking:
+                        return (self.attack_target_x, self.attack_target_y)
                     return (self.anchor_x, self.anchor_y)
 
                 def get_rope_alpha():
-                    if self.is_swinging or self.is_hanging_upside_down:
+                    if self.is_swinging or self.is_hanging_upside_down or self.is_swing_attacking:
                         return 1.0
                     return 0.0
 
@@ -127,27 +136,39 @@ class SpiderManCharacter(BaseCharacter):
         wrist_y = self.y - 6.0
 
         if ability_name in ("web_swing", "swing"):
+            now = time.time()
             self.is_hanging_upside_down = False
             self.is_perched = False
             self.is_wall_crawling = False
+            self.is_seated = False
             self.is_swinging = True
             self.state = CharacterState.FLY
+            self.swing_timer = now
 
-            # Anchor web to ceiling above destination
-            self.anchor_x = target_x + (random.uniform(-40.0, 40.0))
-            self.anchor_y = max(30.0, min(self.y - 180.0, target_y - 200.0))
-            self.web_length = max(180.0, math.hypot(self.x - self.anchor_x, self.y - self.anchor_y))
-            
-            # Initial pendulum angle & impulse
-            self.swing_angle = math.atan2(self.x - self.anchor_x, self.y - self.anchor_y)
-            self.swing_vel = (1.0 if target_x >= self.x else -1.0) * random.uniform(1.8, 2.8)
-            self.facing_right = (target_x >= self.x)
+            swing_dir = 1.0 if target_x >= self.x else -1.0
+            self.facing_right = (swing_dir > 0)
+            self.swing_direction = swing_dir
+
+            # Anchor web to ceiling ahead of Spider-Man
+            anchor_dist_x = min(320.0, max(120.0, abs(target_x - self.x) * 0.65))
+            self.anchor_x = self.x + swing_dir * anchor_dist_x
+            self.anchor_y = max(25.0, min(self.y - 180.0, 90.0))
+
+            # Calibrate web length so the pendulum swing clears the ground comfortably
+            max_safe_len = max(140.0, (self.y + 120.0) - self.anchor_y)
+            curr_dist = math.hypot(self.x - self.anchor_x, self.y - self.anchor_y)
+            self.web_length = max(140.0, min(curr_dist, max_safe_len))
+
+            # Initial pendulum angle and impulse
+            dx = max(-self.web_length * 0.95, min(self.web_length * 0.95, self.x - self.anchor_x))
+            self.swing_angle = math.asin(dx / self.web_length)
+            self.swing_vel = swing_dir * random.uniform(1.4, 2.2)
 
             self._ensure_swing_rope()
 
             audio_mgr.play("thwip")
             particle_mgr.burst_sparks(wrist_x, wrist_y, count=6, color=(0.95, 0.98, 1.0), size=2.5)
-            self.web_shoot_timer = time.time() + 0.35
+            self.web_shoot_timer = now + 0.35
             return True
 
         elif ability_name in ("web_throw", "web_shoot", "web"):
@@ -193,11 +214,75 @@ class SpiderManCharacter(BaseCharacter):
             self.state = CharacterState.JUMP
             return True
 
+        elif ability_name in ("swing_attack", "web_strike", "strike"):
+            self._destroy_swing_rope()
+            self.facing_right = (target_x >= self.x)
+            dir_mult = 1.0 if self.facing_right else -1.0
+            wrist_x = self.x + dir_mult * 26.0
+            wrist_y = self.y - 6.0
+            self.attack_target_x = target_x
+            self.attack_target_y = target_y
+            self.is_swing_attacking = True
+            self.attack_timer = time.time()
+            self.is_perched = False
+            self.is_seated = False
+            self.is_hanging_upside_down = False
+            self.is_wall_crawling = False
+            self.is_swinging = False
+            self.state = CharacterState.FLY
+            self.eye_squint = 0.5
+
+            dx = target_x - self.x
+            dy = target_y - self.y
+            dist = max(10.0, math.hypot(dx, dy))
+
+            # Catapult forward at high velocity towards target with dropkick angle
+            strike_speed = 28.0
+            self.vx = (dx / dist) * strike_speed
+            self.vy = (dy / dist) * strike_speed
+            self.tilt = math.atan2(dy, dx) + (-0.15 if self.facing_right else 0.15)
+
+            self._ensure_swing_rope()
+            audio_mgr.play("thwip")
+            particle_mgr.burst_sparks(wrist_x, wrist_y, count=8, color=(0.95, 0.98, 1.0), size=2.5)
+            return True
+
+        elif ability_name in ("web_cocoon", "cocoon"):
+            self._destroy_swing_rope()
+            self.facing_right = (target_x >= self.x)
+            dir_mult = 1.0 if self.facing_right else -1.0
+            wrist_x = self.x + dir_mult * 26.0
+            wrist_y = self.y - 6.0
+            self.web_target_x = target_x
+            self.web_target_y = target_y
+            self.web_shoot_timer = time.time() + 0.65
+            self.eye_squint = 0.7  # Intense web-spinning squint
+            audio_mgr.play("thwip")
+
+            def _on_cocoon_impact():
+                audio_mgr.play("thwip")
+                particle_mgr.burst_sparks(target_x, target_y, count=24, color=(0.95, 0.98, 1.0), size=3.2)
+                particle_mgr.shockwave(target_x, target_y, max_radius=85.0, color=(0.92, 0.96, 1.0))
+
+            DesktopProjectileWindow(
+                proj_type="web_cocoon",
+                start_x=wrist_x,
+                start_y=wrist_y,
+                target_x=target_x,
+                target_y=target_y,
+                owner_getter=lambda: (self.x, self.y),
+                on_catch=_on_cocoon_impact,
+                speed=28.0
+            )
+            particle_mgr.burst_sparks(wrist_x, wrist_y, count=16, color=(0.95, 0.98, 1.0), size=3.0)
+            return True
+
         elif ability_name in ("perch", "crouch"):
             self._destroy_swing_rope()
             self.is_swinging = False
             self.is_hanging_upside_down = False
             self.is_wall_crawling = False
+            self.is_swing_attacking = False
             self.is_seated = False
             self.is_perched = True
             self.state = CharacterState.IDLE
@@ -218,19 +303,72 @@ class SpiderManCharacter(BaseCharacter):
             self.is_swinging = False
             self.is_hanging_upside_down = False
             self.is_wall_crawling = False
-            self.is_perched = False
-            self.is_seated = True
+            self.is_swing_attacking = False
             self.state = CharacterState.IDLE
             self.vx = 0.0
             self.vy = 0.0
             self.tilt = 0.0
             self.eye_squint = 0.0
+
             from core.platforms import platform_manager
-            ledge = platform_manager.is_on_ledge(self.x, self.y, tolerance=30.0) or platform_manager.get_nearest_ledge(self.x, self.y, max_dist=50.0)
-            if ledge:
-                self.current_ledge = ledge
-                self.y = ledge.top - 8.0
-            particle_mgr.smoke_puff(self.x, self.y + 20, count=2)
+            all_ledges = platform_manager.ledges + platform_manager.dynamic_ledges
+            real_ledges = [l for l in all_ledges if platform_manager.is_real_surface(l)]
+            panel_ledges = [l for l in all_ledges if l.ledge_type == "panel"]
+            window_ledges = [l for l in real_ledges if l.ledge_type == "window"]
+
+            # 1. Check if Spidey is already directly on a valid ledge (e.g. test or real window)
+            on_ledge = platform_manager.is_on_ledge(self.x, self.y, tolerance=32.0, require_real=False)
+            if on_ledge and (on_ledge.ledge_type in ("window", "panel") or platform_manager.is_real_surface(on_ledge)):
+                self.current_ledge = on_ledge
+                self.is_seated = True
+                self.is_perched = False
+                self.y = on_ledge.top - 8.0
+                particle_mgr.smoke_puff(self.x, self.y + 16, count=2)
+                return True
+
+            # 2. Check upper taskbar panel (system panel ledge or top of screen y <= 45.0)
+            if abs(self.y - 32.0) < 55.0 or (panel_ledges and abs(self.y - panel_ledges[0].top) < 55.0):
+                top_panel = panel_ledges[0] if panel_ledges else None
+                top_y = top_panel.top if top_panel else 32.0
+                self.current_ledge = top_panel
+                self.is_seated = True
+                self.is_perched = False
+                self.y = top_y - 8.0
+                audio_mgr.play("thwip")
+                particle_mgr.smoke_puff(self.x, self.y + 16, count=2)
+                return True
+
+            # 3. Check if near ground floor level
+            if self.y >= 980.0:  # near standard ground
+                self.current_ledge = None
+                self.is_seated = True
+                self.is_perched = False
+                self.y = 1010.0 - 8.0
+                particle_mgr.smoke_puff(self.x, self.y + 16, count=2)
+                return True
+
+            # 4. If there is a real, verified window ledge on screen, web-zip to it
+            if window_ledges:
+                best_ledge = min(window_ledges, key=lambda l: l.distance_to(self.x, self.y))
+                self.current_ledge = best_ledge
+                self.x = max(best_ledge.left + 25.0, min(best_ledge.right - 25.0, self.x))
+                self.y = best_ledge.top - 8.0
+                self.is_seated = True
+                self.is_perched = False
+                audio_mgr.play("thwip")
+                particle_mgr.burst_sparks(self.x, self.y, count=5, color=(0.95, 0.98, 1.0))
+                return True
+
+            # 5. Default fallback: Web-zip up to Upper Taskbar Panel (y=24.0)
+            # Firmly seated on the upper taskbar overlooking the desktop, never in mid-air
+            top_panel = panel_ledges[0] if panel_ledges else None
+            top_y = top_panel.top if top_panel else 32.0
+            self.current_ledge = top_panel
+            self.y = top_y - 8.0
+            self.is_seated = True
+            self.is_perched = False
+            audio_mgr.play("thwip")
+            particle_mgr.burst_sparks(self.x, self.y, count=5, color=(0.95, 0.98, 1.0))
             return True
 
         elif ability_name in ("wall_crawl", "crawl"):
@@ -307,14 +445,64 @@ class SpiderManCharacter(BaseCharacter):
 
         # Autonomous abilities
         if activity > 0.1 and now >= self.action_timer:
-            self.action_timer = now + random.uniform(4.0, 9.0) / max(0.2, activity)
+            self.action_timer = now + random.uniform(3.5, 7.5) / max(0.2, activity)
             r = random.random()
-            if r < 0.40 and not self.is_swinging:
-                self.trigger_ability("web_swing", cursor_x, cursor_y, particle_mgr, audio_mgr)
+            if r < 0.25 and not self.is_swinging and not self.is_swing_attacking:
+                target_swing_x = cursor_x if abs(cursor_x - self.x) > 80.0 else (self.x + random.choice([-260.0, 260.0]))
+                self.trigger_ability("web_swing", target_swing_x, cursor_y, particle_mgr, audio_mgr)
+            elif r < 0.40 and not self.is_swinging and not self.is_swing_attacking:
+                # Web cocoon barrage!
+                self.trigger_ability("web_cocoon", cursor_x, cursor_y, particle_mgr, audio_mgr)
+            elif r < 0.55 and not self.is_swinging and not self.is_swing_attacking:
+                # Dynamic swing attack / web-strike
+                self.trigger_ability("swing_attack", cursor_x, cursor_y, particle_mgr, audio_mgr)
             elif r < 0.70:
                 self.trigger_ability("web_throw", cursor_x, cursor_y, particle_mgr, audio_mgr)
-            elif r < 0.85 and self.y >= ground_y - 10.0:
+            elif r < 0.85 and not self.is_swinging and not self.is_swing_attacking:
+                # Web-zip to upper taskbar or window to sit or hang!
+                if random.random() < 0.55:
+                    self.trigger_ability("seat", cursor_x, cursor_y, particle_mgr, audio_mgr)
+                else:
+                    self.trigger_ability("upside_down_hang", cursor_x, cursor_y, particle_mgr, audio_mgr)
+            elif self.y >= ground_y - 10.0:
                 self.trigger_ability("perch", cursor_x, cursor_y, particle_mgr, audio_mgr)
+
+        # SWING-ATTACK / WEB-STRIKE KINEMATICS
+        if self.is_swing_attacking:
+            now = time.time()
+            elapsed_atk = now - self.attack_timer
+            self._ensure_swing_rope()
+            if self.rope_window:
+                self.rope_window.update()
+
+            self.state = CharacterState.FLY
+            dx = self.attack_target_x - self.x
+            dy = self.attack_target_y - self.y
+            dist = math.hypot(dx, dy)
+
+            # Check impact with target point or duration timeout
+            if dist < 36.0 or elapsed_atk > 0.48:
+                # Impact target with comic web strike!
+                self.is_swing_attacking = False
+                self._destroy_swing_rope()
+                self.state = CharacterState.JUMP
+                audio_mgr.play("punch")
+                particle_mgr.burst_sparks(self.x, self.y, count=16, color=(0.95, 0.98, 1.0), size=3.2)
+                particle_mgr.shockwave(self.x, self.y, max_radius=65.0, color=(1.0, 0.9, 0.2))
+
+                # Dynamic backflip recoil leap
+                dir_sign = -1.0 if self.facing_right else 1.0
+                self.vx = dir_sign * 11.0
+                self.vy = -13.0
+                self.tilt = dir_sign * 0.45
+            else:
+                # Catapulting towards target
+                self.x += self.vx
+                self.y += self.vy
+                self.tilt = math.atan2(dy, dx) + (-0.15 if self.facing_right else 0.15)
+                if random.random() < 0.4:
+                    particle_mgr.burst_sparks(self.x, self.y, count=2, color=(0.95, 0.98, 1.0), size=1.8)
+            return
 
         # UPSIDE-DOWN HANG STATE
         if self.is_hanging_upside_down:
@@ -341,18 +529,21 @@ class SpiderManCharacter(BaseCharacter):
             if self.rope_window:
                 self.rope_window.update()
             self.state = CharacterState.FLY
-            # Pendulum gravity acceleration: theta'' = - (g / L) * sin(theta)
-            gravity = 22.0
-            accel = -(gravity / (self.web_length * 0.08)) * math.sin(self.swing_angle)
-            self.swing_vel += accel * dt * 3.8 * speed_mult
-            self.swing_vel *= 0.992  # Air drag damping
-            self.swing_angle += self.swing_vel * dt * 3.8
+            elapsed_swing = now - self.swing_timer
+
+            # Calibrated dynamic pendulum physics with kinetic pump
+            gravity = 18.0
+            accel = -gravity * math.sin(self.swing_angle)
+            self.swing_vel += accel * dt * speed_mult
+            self.swing_vel *= 0.995  # Aerodynamic drag damping
+            self.swing_angle += self.swing_vel * dt * 2.8
 
             # Update coordinates along pendulum arc
             self.x = self.anchor_x + self.web_length * math.sin(self.swing_angle)
-            self.y = self.anchor_y + self.web_length * math.cos(self.swing_angle)
+            raw_y = self.anchor_y + self.web_length * math.cos(self.swing_angle)
+            self.y = min(ground_y - 8.0, raw_y)
 
-            # Body orientation tilts tangential to the swing trajectory
+            # Body orientation tilts dynamically with the swing arc
             target_tilt = self.swing_angle + (0.35 if self.swing_vel > 0 else -0.35)
             self.tilt += (target_tilt - self.tilt) * 0.25
             self.facing_right = (self.swing_vel >= 0.0)
@@ -372,31 +563,48 @@ class SpiderManCharacter(BaseCharacter):
                     self.state = CharacterState.JUMP
                     self.vx = (dx / max(1.0, dist)) * 16.5 * speed_mult
                     self.vy = min(-9.0, max(-20.0, dy * 0.14))
-                    self.tilt = (self.vx / 14.0) * 0.22
+                    self.tilt = (self.vx / 14.0) * 0.25
                     audio_mgr.play("swoosh")
                     particle_mgr.burst_sparks(self.x, self.y, count=5, color=(0.95, 0.98, 1.0))
                     return
 
-            # Web release at apex or near ground
-            if (abs(self.swing_vel) < 0.4 and abs(self.swing_angle) > 0.45) or self.y >= ground_y - 10.0:
+            # Release web at apex or after solid swing duration
+            # Spider-Man MUST swing for at least 0.40 seconds before releasing!
+            is_apex = (
+                elapsed_swing > 0.40 and (
+                    (self.swing_direction > 0 and self.swing_angle > 0.22 and self.swing_vel < 0.6) or
+                    (self.swing_direction < 0 and self.swing_angle < -0.22 and self.swing_vel > -0.6) or
+                    elapsed_swing > 1.35
+                )
+            )
+            is_ground_hit = (
+                elapsed_swing > 0.45 and
+                self.y >= ground_y - 10.0 and
+                self.swing_vel * math.sin(self.swing_angle) > 0.1
+            )
+
+            if is_apex or is_ground_hit:
                 # Release web line and transition to graceful aerial leap
                 self.is_swinging = False
                 self._destroy_swing_rope()
-                self.vx = self.swing_vel * 35.0
-                self.vy = -abs(self.swing_vel) * 20.0
+                dir_sign = 1.0 if self.facing_right else -1.0
+                self.vx = dir_sign * max(14.0, abs(self.swing_vel) * 28.0) * speed_mult
+                self.vy = min(-10.0, -abs(self.swing_vel) * 16.0)
                 if self.nav_stage == "SWING":
                     self.nav_stage = "JUMP"
+                    self.nav_timer = now
                     self.state = CharacterState.JUMP
                 else:
-                    self.state = CharacterState.FLY
-                self.tilt = (self.vx / 14.0) * 0.22
+                    self.state = CharacterState.JUMP
+                self.tilt = (self.vx / 14.0) * 0.25
                 audio_mgr.play("swoosh")
-                particle_mgr.burst_sparks(self.x, self.y, count=4, color=(0.92, 0.96, 1.0), size=2.2)
+                particle_mgr.burst_sparks(self.x, self.y, count=5, color=(0.92, 0.96, 1.0), size=2.4)
 
             return
 
-        if self.rope_window is not None:
-            self._destroy_swing_rope()
+        if not (self.is_swinging or self.is_hanging_upside_down or self.is_swing_attacking):
+            if self.rope_window is not None:
+                self._destroy_swing_rope()
 
         # WALL-CRAWL STATE
         near_left = (self.x <= min_x + 65.0)
@@ -413,6 +621,8 @@ class SpiderManCharacter(BaseCharacter):
         else:
             if self.is_wall_crawling:
                 self.tilt = 0.0
+                self.is_wall_crawling = False
+                return
             self.is_wall_crawling = False
 
         # 1. MULTI-STAGE AUTONOMOUS NAVIGATION (Run -> Swing -> Jump -> Land/Seat/Perch)
@@ -435,15 +645,19 @@ class SpiderManCharacter(BaseCharacter):
                 self.vx = 0.0
                 self.vy = 0.0
                 self.tilt = 0.0
-                # Check if arrived on a window ledge or button
+                # Check if arrived on a window ledge or button (require genuine real surface)
                 from core.platforms import platform_manager
-                ledge = platform_manager.is_on_ledge(self.x, self.y, tolerance=24.0) or platform_manager.get_nearest_ledge(self.x, self.y, max_dist=45.0)
+                ledge = platform_manager.is_on_ledge(self.x, self.y, tolerance=24.0, require_real=True) or platform_manager.get_nearest_ledge(self.x, self.y, max_dist=45.0, require_real=True)
                 if ledge:
                     self.current_ledge = ledge
                     if ledge.ledge_type == "button":
                         self.is_perched = True
                         self.is_seated = False
                         self.y = ledge.top
+                    elif ledge.ledge_type == "panel":
+                        self.is_seated = True
+                        self.is_perched = False
+                        self.y = ledge.top - 8.0
                     else:
                         if random.random() < 0.6:
                             self.is_seated = True
@@ -453,11 +667,20 @@ class SpiderManCharacter(BaseCharacter):
                             self.is_perched = True
                             self.is_seated = False
                             self.y = ledge.top
+                    self.state = CharacterState.IDLE
+                elif self.y <= 40.0:
+                    self.current_ledge = None
+                    self.is_seated = True
+                    self.is_perched = False
+                    self.y = 24.0
+                    self.state = CharacterState.IDLE
                 else:
+                    # Arrived at coordinates without a ledge: Land gracefully on the ground in superhero perch!
+                    self.current_ledge = None
                     self.is_perched = True
                     self.is_seated = False
                     self.y = ground_y
-                self.state = CharacterState.IDLE
+                    self.state = CharacterState.IDLE
                 particle_mgr.smoke_puff(self.x, self.y + 16, count=2)
                 return
             else:
@@ -474,10 +697,14 @@ class SpiderManCharacter(BaseCharacter):
                             # Stage 2: Fire web and launch high pendulum swing!
                             self.nav_stage = "SWING"
                             self.nav_timer = time.time()
+                            self.swing_timer = self.nav_timer
                             self.anchor_x = (self.x + tx) / 2.0
                             self.anchor_y = max(30.0, min(self.y - 150.0, ty - 180.0))
-                            self.web_length = math.hypot(self.x - self.anchor_x, self.y - self.anchor_y)
-                            self.swing_angle = math.atan2(self.x - self.anchor_x, self.y - self.anchor_y)
+                            curr_dist = math.hypot(self.x - self.anchor_x, self.y - self.anchor_y)
+                            max_safe_len = max(140.0, (self.y + 120.0) - self.anchor_y)
+                            self.web_length = max(140.0, min(curr_dist, max_safe_len))
+                            dx_anc = max(-self.web_length * 0.95, min(self.web_length * 0.95, self.x - self.anchor_x))
+                            self.swing_angle = math.asin(dx_anc / self.web_length)
                             self.swing_vel = 1.8 if dx > 0 else -1.8
                             self.is_swinging = True
                             self.state = CharacterState.FLY
@@ -537,17 +764,20 @@ class SpiderManCharacter(BaseCharacter):
 
         # 2. WINDOW LEDGE & BUTTON INTERACTION
         from core.platforms import platform_manager
-        current_ledge = platform_manager.is_on_ledge(self.x, self.y, tolerance=14.0)
-        if current_ledge and self.nav_target is None and not self.is_swinging and not self.is_hanging_upside_down:
+        current_ledge = platform_manager.is_on_ledge(self.x, self.y, tolerance=14.0, require_real=True)
+        if current_ledge and self.nav_target is None and not self.is_swinging and not self.is_hanging_upside_down and not self.is_swing_attacking:
             self.current_ledge = current_ledge
             self.vy = 0.0
 
             if abs(self.vx) < 1.0:
-                # Sitting or perching on window frame / buttons
+                # Sitting or perching on window frame / buttons / top panel
                 if not self.is_perched and not self.is_seated:
                     if current_ledge.ledge_type == "button":
                         self.is_perched = True
                         self.is_seated = False
+                    elif current_ledge.ledge_type == "panel":
+                        self.is_seated = True
+                        self.is_perched = False
                     else:
                         if random.random() < 0.6:
                             self.is_seated = True
@@ -567,10 +797,23 @@ class SpiderManCharacter(BaseCharacter):
                 self.is_seated = False
                 self.y = current_ledge.top
         else:
-            self.current_ledge = None
+            if not platform_manager.is_real_surface(self.current_ledge):
+                self.current_ledge = None
+
+        # Strict Anti-Mid-Air Seating Invariant:
+        # Spider-Man CANNOT be seated in mid-air (between upper taskbar and ground without a verified real surface)
+        if self.is_seated and not self.is_swinging and not self.is_hanging_upside_down and not self.is_wall_crawling:
+            on_top_panel = (self.y <= 42.0 or (self.current_ledge and self.current_ledge.ledge_type == "panel"))
+            on_ground = (self.y >= ground_y - 14.0)
+            on_real_window = (self.current_ledge is not None and platform_manager.is_real_surface(self.current_ledge))
+            if not (on_top_panel or on_ground or on_real_window):
+                self.is_seated = False
+                self.current_ledge = None
+                self.state = CharacterState.JUMP
+                self.vy = 1.5
 
         # 3. GROUND & AIR NAVIGATION (Standard Autonomous Wander)
-        if self.nav_target is None and not self.is_swinging and not self.is_hanging_upside_down:
+        if self.nav_target is None and not self.is_swinging and not self.is_hanging_upside_down and not self.is_swing_attacking:
             dx = cursor_x - self.x
             dy = cursor_y - self.y
             dist = math.hypot(dx, dy)
@@ -608,14 +851,11 @@ class SpiderManCharacter(BaseCharacter):
                     self.tilt = 0.0
                     self.vx *= 0.80
             elif self.y >= ground_y - 3.0 and abs(self.vy) < 2.0:
-                # On ground
+                # On ground: Spider-Man crouches in his iconic three-point perch (NEVER sits dangling legs on floor)
                 self.vy = 0.0
-                if self.is_seated:
-                    self.y = ground_y - 8.0
-                    self.tilt = 0.0
-                    self.state = CharacterState.IDLE
-                    self.vx *= 0.75
-                elif self.is_perched:
+                self.is_seated = False
+                if self.is_perched or abs(self.vx) < 0.5:
+                    self.is_perched = True
                     self.y = ground_y
                     self.tilt = 0.0
                     self.state = CharacterState.IDLE
@@ -638,19 +878,49 @@ class SpiderManCharacter(BaseCharacter):
                     self.vx *= 0.80
                     self.x += self.vx
             else:
-                # Airborne gravity and velocity damping
-                self.state = CharacterState.FLY if abs(self.vx) > 3.0 else CharacterState.HOVER
-                self.vy += 0.85  # Normal gravity
-                self.vx *= 0.96
+                # Airborne acrobatic jump / leap kinematics
+                # MUST CLEAR is_seated and is_perched while airborne!
+                self.is_seated = False
+                self.is_perched = False
+                self.state = CharacterState.JUMP if abs(self.vy) > 1.5 else (CharacterState.FLY if abs(self.vx) > 3.0 else CharacterState.HOVER)
+                self.vy += 0.72  # Air gravity
+                self.vx *= 0.97
                 self.x += self.vx
                 self.y += self.vy
-                target_tilt = (self.vx / 12.0) * 0.25
-                self.tilt += (target_tilt - self.tilt) * 0.15
+                target_tilt = (self.vx / 14.0) * 0.28 + (-0.10 if self.vy < 0 else 0.16)
+                self.tilt += (target_tilt - self.tilt) * 0.20
+
+                # Ledge collision check while airborne (require genuine physical surface)
+                hit_ledge = platform_manager.is_on_ledge(self.x, self.y, tolerance=18.0, require_real=True)
+                if hit_ledge and self.vy > 0 and self.y < ground_y - 30.0:
+                    self.current_ledge = hit_ledge
+                    self.vy = 0.0
+                    self.vx = 0.0
+                    self.tilt = 0.0
+                    self.state = CharacterState.IDLE
+                    if hit_ledge.ledge_type == "panel":
+                        self.is_seated = True
+                        self.is_perched = False
+                        self.y = hit_ledge.top - 8.0
+                    elif hit_ledge.ledge_type == "window" and random.random() < 0.65:
+                        self.is_seated = True
+                        self.is_perched = False
+                        self.y = hit_ledge.top - 8.0
+                    else:
+                        self.is_perched = True
+                        self.is_seated = False
+                        self.y = hit_ledge.top
+                    particle_mgr.smoke_puff(self.x, self.y + 16, count=2)
+                    return
 
                 if self.y >= ground_y:
                     self.y = ground_y
                     self.vy = 0.0
+                    self.vx *= 0.6
                     self.tilt = 0.0
+                    self.state = CharacterState.IDLE
+                    self.is_perched = True
+                    self.is_seated = False
                     particle_mgr.smoke_puff(self.x, ground_y + 18, count=3)
 
         # Screen boundaries clamping
@@ -708,20 +978,31 @@ class SpiderManCharacter(BaseCharacter):
         # -------------------------------------------------------------
         # CHARACTER LOCAL TRANSFORMATION
         # -------------------------------------------------------------
-        effective_tilt = 0.0 if (self.is_seated or self.is_perched or self.state == CharacterState.IDLE) else self.tilt
         ctx.translate(self.x, self.y)
-        ctx.rotate(effective_tilt)
-        ctx.scale(self.scale, self.scale)
         if not self.facing_right:
             ctx.scale(-1.0, 1.0)
 
-        # Dynamic athletic sprint forward lean and vertical stride bob
         is_running = (self.state == CharacterState.RUN)
-        if is_running:
+        if self.is_hanging_upside_down:
+            ctx.rotate(math.pi)
+        elif self.is_perched:
+            ctx.rotate(0.30)  # Athletic forward 3-point crouch lean
+            ctx.translate(0, 8)  # Lower center of mass toward ledge/ground
+        elif getattr(self, "is_swing_attacking", False):
+            ctx.rotate(0.32)  # Aerodynamic forward dropkick dive angle
+        elif self.is_seated or self.state == CharacterState.IDLE:
+            pass
+        elif is_running:
             run_cycle = self.stride * 4.5
             bob = -abs(math.sin(run_cycle)) * 2.8
             ctx.translate(0, bob)
             ctx.rotate(0.24)  # ~14° forward athletic lean into the sprint
+        else:
+            # Airborne (JUMP / FLY) tilt
+            dir_mult = 1.0 if self.facing_right else -1.0
+            ctx.rotate(self.tilt * dir_mult)
+
+        ctx.scale(self.scale, self.scale)
 
         # Spider-Man Classic Palette
         SPIDER_RED = (0.86, 0.12, 0.12)
@@ -757,92 +1038,220 @@ class SpiderManCharacter(BaseCharacter):
         # 2. LEGS & RED BOOTS (3/4 Dynamic Athletic Runner Cycle)
         # -------------------------------------------------------------
         ctx.save()
-        if self.is_seated:
-            # Iconic Rooftop/Window Seated Posture:
-            # Legs bend 90 degrees at window edge with boots dangling and swinging
-            swing1 = math.sin(self.anim_time * 2.8) * 3.5
-            swing2 = math.cos(self.anim_time * 2.8) * 3.0
-
-            # Far Leg: thigh forward, calf dangling down over edge
+        if self.is_hanging_upside_down:
+            # Hanging upside down from ceiling web strand
+            # Far leg extended straight up to hook web line
             ctx.set_source_rgb(*SPIDER_BLUE_DARK)
             ctx.set_line_width(7.5)
             ctx.set_line_cap(cairo.LINE_CAP_ROUND)
-            ctx.move_to(-2, 8)
-            ctx.line_to(8, 8)
-            ctx.line_to(9 + swing1, 23)
+            ctx.move_to(-3, 4)
+            ctx.line_to(-4, 16)
+            ctx.line_to(-3, 27)
             ctx.stroke()
-            # Far Boot
+            # Far boot wrapped around web strand
             ctx.set_source_rgb(*SPIDER_RED_DARK)
-            ctx.set_line_width(6.5)
-            ctx.move_to(8.5 + swing1 * 0.7, 16)
-            ctx.line_to(9.5 + swing1, 25)
-            ctx.line_to(13.5 + swing1, 25)
+            ctx.set_line_width(6.8)
+            ctx.move_to(-4, 20)
+            ctx.line_to(-3, 27)
+            ctx.line_to(1, 28)
             ctx.stroke()
 
-            # Near Leg: thigh forward, calf dangling down over edge
+            # Near leg casually crossed over knee
             ctx.set_source_rgb(*SPIDER_BLUE)
             ctx.set_line_width(8.0)
-            ctx.move_to(3, 8)
-            ctx.line_to(13, 8)
-            ctx.line_to(14 + swing2, 24)
+            ctx.move_to(3, 4)
+            ctx.line_to(14, 12)
+            ctx.line_to(1, 16)
             ctx.stroke()
-            # Near Boot
+            # Near boot
             ctx.set_source_rgb(*SPIDER_RED)
             ctx.set_line_width(7.0)
-            ctx.move_to(13.5 + swing2 * 0.7, 17)
-            ctx.line_to(14.5 + swing2, 26)
-            ctx.line_to(18.5 + swing2, 26)
+            ctx.move_to(8, 14)
+            ctx.line_to(0, 16)
+            ctx.line_to(-3, 15)
+            ctx.stroke()
+
+        elif self.is_seated:
+            # Authentic Spider-Man Window Sill / Taskbar Seating Posture:
+            # One knee raised high with boot planted on the ledge, other leg dangling and swinging over edge
+            swing = math.sin(self.anim_time * 2.2) * 3.5
+
+            # Far Leg: High raised knee pulled near chest, boot planted on ledge
+            ctx.set_source_rgb(*SPIDER_BLUE_DARK)
+            ctx.set_line_width(7.5)
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            ctx.move_to(-3, 6)
+            ctx.line_to(-2, -6)
+            ctx.line_to(4, 7)
+            ctx.stroke()
+            # Far Boot planted on ledge
+            ctx.set_source_rgb(*SPIDER_RED_DARK)
+            ctx.set_line_width(6.5)
+            ctx.move_to(2, 2)
+            ctx.line_to(4, 7)
+            ctx.line_to(9, 7)
+            ctx.stroke()
+
+            # Near Leg: Thigh forward over sill edge, calf dangling and swinging freely
+            ctx.set_source_rgb(*SPIDER_BLUE)
+            ctx.set_line_width(8.0)
+            ctx.move_to(3, 6)
+            ctx.line_to(11, 7)
+            ctx.line_to(12 + swing, 23)
+            ctx.stroke()
+            # Near Boot dangling in breeze
+            ctx.set_source_rgb(*SPIDER_RED)
+            ctx.set_line_width(7.0)
+            ctx.move_to(11.5 + swing * 0.7, 16)
+            ctx.line_to(12.5 + swing, 24)
+            ctx.line_to(16.5 + swing, 24)
+            ctx.stroke()
+
+        elif getattr(self, "is_swing_attacking", False):
+            # Iconic Spider-Man flying dual-footed dropkick / web strike impact kick
+            # Far leg thrust forward
+            ctx.set_source_rgb(*SPIDER_BLUE_DARK)
+            ctx.set_line_width(7.8)
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            ctx.move_to(-3, 2)
+            ctx.line_to(12, -1)
+            ctx.line_to(28, -3)
+            ctx.stroke()
+            # Far boot with striking sole
+            ctx.set_source_rgb(*SPIDER_RED_DARK)
+            ctx.set_line_width(6.8)
+            ctx.move_to(20, -2)
+            ctx.line_to(28, -3)
+            ctx.line_to(31, -1)
+            ctx.stroke()
+
+            # Near leg thrust forward alongside far leg
+            ctx.set_source_rgb(*SPIDER_BLUE)
+            ctx.set_line_width(8.2)
+            ctx.move_to(4, 3)
+            ctx.line_to(16, 2)
+            ctx.line_to(30, 4)
+            ctx.stroke()
+            # Near boot with striking sole
+            ctx.set_source_rgb(*SPIDER_RED)
+            ctx.set_line_width(7.2)
+            ctx.move_to(22, 3)
+            ctx.line_to(30, 4)
+            ctx.line_to(33, 6)
             ctx.stroke()
 
         elif self.is_perched:
-            # Low three-point crouching posture
+            # Iconic superhero three-point crouch legs
+            # Deeply flexed thighs, wide stable base, boots firmly planted
             ctx.set_source_rgb(*SPIDER_BLUE_DARK)
             ctx.set_line_width(8.0)
             ctx.set_line_cap(cairo.LINE_CAP_ROUND)
             ctx.move_to(-4, 4)
-            ctx.line_to(-22, 10)
-            ctx.line_to(-16, 26)
+            ctx.line_to(-18, 10)
+            ctx.line_to(-14, 26)
             ctx.stroke()
             ctx.set_source_rgb(*SPIDER_RED_DARK)
             ctx.set_line_width(7.0)
-            ctx.move_to(-18, 20)
-            ctx.line_to(-12, 28)
+            ctx.move_to(-16, 18)
+            ctx.line_to(-14, 26)
+            ctx.line_to(-8, 26)
             ctx.stroke()
 
-            # Front Leg crouched under chest
+            # Near leg crouched under chest with forward knee
             ctx.set_source_rgb(*SPIDER_BLUE)
+            ctx.set_line_width(8.5)
             ctx.move_to(4, 4)
             ctx.line_to(16, 12)
             ctx.line_to(10, 26)
             ctx.stroke()
             ctx.set_source_rgb(*SPIDER_RED)
+            ctx.set_line_width(7.5)
             ctx.move_to(14, 18)
-            ctx.line_to(12, 28)
+            ctx.line_to(10, 26)
+            ctx.line_to(16, 26)
             ctx.stroke()
 
         elif self.is_swinging:
-            # Dynamic airborne tucked legs trailing in wind
+            # Dynamic airborne tucked legs trailing in wind, reacting to swing speed
+            vel_push = max(-8.0, min(8.0, self.swing_vel * 2.4))
+            
             ctx.set_source_rgb(*SPIDER_BLUE_DARK)
-            ctx.set_line_width(7.0)
+            ctx.set_line_width(7.2)
             ctx.set_line_cap(cairo.LINE_CAP_ROUND)
-            ctx.move_to(-5, 5)
-            ctx.line_to(-18, 14)
-            ctx.line_to(-12, 26)
+            ctx.move_to(-5, 4)
+            ctx.line_to(-16 + vel_push * 0.5, 12)
+            ctx.line_to(-10 + vel_push, 24)
             ctx.stroke()
             ctx.set_source_rgb(*SPIDER_RED_DARK)
-            ctx.move_to(-14, 20)
-            ctx.line_to(-10, 27)
+            ctx.set_line_width(6.2)
+            ctx.move_to(-13 + vel_push * 0.7, 18)
+            ctx.line_to(-8 + vel_push, 26)
             ctx.stroke()
 
-            # Near leg kicking forward
+            # Near leg kicking forward with g-force
             ctx.set_source_rgb(*SPIDER_BLUE)
-            ctx.move_to(3, 5)
-            ctx.line_to(14, 16)
-            ctx.line_to(8, 28)
+            ctx.set_line_width(7.8)
+            ctx.move_to(3, 4)
+            ctx.line_to(14 + vel_push * 0.8, 14)
+            ctx.line_to(10 + vel_push * 1.2, 26)
             ctx.stroke()
             ctx.set_source_rgb(*SPIDER_RED)
-            ctx.move_to(12, 22)
-            ctx.line_to(7, 29)
+            ctx.set_line_width(7.0)
+            ctx.move_to(12 + vel_push, 20)
+            ctx.line_to(10 + vel_push * 1.2, 28)
+            ctx.stroke()
+
+        elif self.state in (CharacterState.JUMP, CharacterState.FLY):
+            # ICONIC MCFARLANE ACROBATIC AERIAL LEAP / FLIP SPLIT
+            is_ascending = (self.vy < 0.0)
+            
+            # Far leg (trailing aerodynamically behind in depth)
+            ctx.set_source_rgb(*SPIDER_BLUE_DARK)
+            ctx.set_line_width(7.2)
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            far_hip = (-4.0, 3.0)
+            if is_ascending:
+                # Trailing straight back with sleek pointed toe
+                far_knee = (-16.0, 10.0)
+                far_foot = (-26.0, 14.0)
+            else:
+                # Tucked up ready to absorb landing shock
+                far_knee = (-14.0, 6.0)
+                far_foot = (-10.0, 20.0)
+            ctx.move_to(far_hip[0], far_hip[1])
+            ctx.line_to(far_knee[0], far_knee[1])
+            ctx.line_to(far_foot[0], far_foot[1])
+            ctx.stroke()
+            # Far red boot
+            ctx.set_source_rgb(*SPIDER_RED_DARK)
+            ctx.set_line_width(6.2)
+            ctx.move_to(far_knee[0] + (far_foot[0] - far_knee[0]) * 0.4, far_knee[1] + (far_foot[1] - far_knee[1]) * 0.4)
+            ctx.line_to(far_foot[0], far_foot[1])
+            ctx.line_to(far_foot[0] - 3.0, far_foot[1] + 1.0)
+            ctx.stroke()
+
+            # Near leg (high athletic forward knee drive)
+            ctx.set_source_rgb(*SPIDER_BLUE)
+            ctx.set_line_width(7.8)
+            near_hip = (4.0, 3.0)
+            if is_ascending:
+                # Explosive high knee tucked toward chest
+                near_knee = (15.0, 6.0)
+                near_foot = (12.0, 20.0)
+            else:
+                # Reaching forward to touch down on ledge/ground
+                near_knee = (14.0, 14.0)
+                near_foot = (8.0, 26.0)
+            ctx.move_to(near_hip[0], near_hip[1])
+            ctx.line_to(near_knee[0], near_knee[1])
+            ctx.line_to(near_foot[0], near_foot[1])
+            ctx.stroke()
+            # Near red boot with flexed sole
+            ctx.set_source_rgb(*SPIDER_RED)
+            ctx.set_line_width(7.0)
+            ctx.move_to(near_knee[0] + (near_foot[0] - near_knee[0]) * 0.4, near_knee[1] + (near_foot[1] - near_knee[1]) * 0.4)
+            ctx.line_to(near_foot[0], near_foot[1])
+            ctx.line_to(near_foot[0] + 3.5, near_foot[1] + 2.0)
             ctx.stroke()
 
         elif is_firing_web:
@@ -1039,79 +1448,223 @@ class SpiderManCharacter(BaseCharacter):
         # 4. ARMS & GENUINE DITKO WEB-SHOOTER TRIGGER GESTURE
         # -------------------------------------------------------------
         ctx.save()
-        if self.is_swinging:
-            # Lead arm holds web line upwards
+        if self.is_hanging_upside_down:
+            # Casual nonchalant Spidey hanging upside down: arms folded across chest
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            # Far arm folded
+            ctx.set_source_rgb(*SPIDER_BLUE_DARK)
+            ctx.set_line_width(6.2)
+            ctx.move_to(-6, -7)
+            ctx.line_to(-12, -1)
+            ctx.line_to(4, -1)
+            ctx.stroke()
+            ctx.set_source_rgb(*SPIDER_RED_DARK)
+            ctx.arc(4, -1, 3.2, 0, 2 * math.pi)
+            ctx.fill()
+
+            # Near arm folded over
             ctx.set_source_rgb(*SPIDER_BLUE)
-            ctx.set_line_width(6.5)
+            ctx.set_line_width(6.8)
+            ctx.move_to(6, -7)
+            ctx.line_to(12, 1)
+            ctx.line_to(-4, 1)
+            ctx.stroke()
+            ctx.set_source_rgb(*SPIDER_RED)
+            ctx.arc(-4, 1, 3.4, 0, 2 * math.pi)
+            ctx.fill()
+
+        elif self.is_swinging:
+            # Lead arm holds web line upwards toward anchor
+            ctx.set_source_rgb(*SPIDER_BLUE)
+            ctx.set_line_width(6.8)
             ctx.set_line_cap(cairo.LINE_CAP_ROUND)
             ctx.move_to(8, -8)
-            ctx.line_to(16, -18)
+            ctx.line_to(14, -18)
+            ctx.line_to(18, -27)
             ctx.stroke()
             ctx.set_source_rgb(*SPIDER_RED)
-            ctx.move_to(16, -18)
-            ctx.line_to(18, -26)
+            ctx.set_line_width(6.2)
+            ctx.move_to(14, -18)
+            ctx.line_to(18, -27)
             ctx.stroke()
-            # Trailing arm outstretched for balance
+            # Glove clutching web line tightly
+            ctx.arc(18, -27, 3.6, 0, 2 * math.pi)
+            ctx.fill()
+
+            # Trailing arm outstretched for aerodynamic counter-balance
+            vel_push = max(-6.0, min(6.0, self.swing_vel * 2.0))
             ctx.set_source_rgb(*SPIDER_BLUE_DARK)
+            ctx.set_line_width(6.2)
             ctx.move_to(-8, -8)
-            ctx.line_to(-20, -2)
-            ctx.line_to(-26, 6)
+            ctx.line_to(-18 - vel_push * 0.5, -2)
+            ctx.line_to(-25 - vel_push, 6)
             ctx.stroke()
             ctx.set_source_rgb(*SPIDER_RED_DARK)
-            ctx.move_to(-20, -2)
-            ctx.line_to(-26, 6)
-            ctx.stroke()
+            ctx.arc(-25 - vel_push, 6, 3.2, 0, 2 * math.pi)
+            ctx.fill()
 
         elif self.is_seated:
-            # Casual seated arms: hands planted on the window sill beside hips for support
-            ctx.set_source_rgb(*SPIDER_BLUE_DARK)
-            ctx.set_line_width(6.5)
+            # Authentic Spider-Man Ledge Arm Posture:
+            # Far arm planted back on sill behind hip for support
+            # Near arm resting elbow on raised knee, glove propping masked chin
             ctx.set_line_cap(cairo.LINE_CAP_ROUND)
             # Far arm supporting behind hip
-            ctx.move_to(-7, -5)
+            ctx.set_source_rgb(*SPIDER_BLUE_DARK)
+            ctx.set_line_width(6.5)
+            ctx.move_to(-7, -4)
             ctx.line_to(-14, 2)
-            ctx.line_to(-12, 10)
+            ctx.line_to(-12, 8)
             ctx.stroke()
             ctx.set_source_rgb(*SPIDER_RED_DARK)
-            ctx.move_to(-13, 6)
-            ctx.line_to(-12, 11)
+            ctx.move_to(-13, 4)
+            ctx.line_to(-12, 8)
             ctx.stroke()
+            ctx.arc(-12, 8, 3.2, 0, 2 * math.pi)
+            ctx.fill()
 
-            # Near arm resting beside hip
+            # Near arm: resting elbow on raised knee (-2, -6), glove supporting chin
             ctx.set_source_rgb(*SPIDER_BLUE)
             ctx.set_line_width(7.0)
-            ctx.move_to(6, -5)
-            ctx.line_to(12, 1)
-            ctx.line_to(10, 10)
+            ctx.move_to(6, -4)
+            ctx.line_to(0, -6)
+            ctx.line_to(2, -15)
             ctx.stroke()
             ctx.set_source_rgb(*SPIDER_RED)
-            ctx.move_to(11, 5)
-            ctx.line_to(10, 11)
+            ctx.set_line_width(6.2)
+            ctx.move_to(0, -6)
+            ctx.line_to(2, -15)
+            ctx.stroke()
+            # Glove propped under chin
+            ctx.arc(2, -15, 3.4, 0, 2 * math.pi)
+            ctx.fill()
+
+        elif getattr(self, "is_swing_attacking", False):
+            # High-speed web strike dive arms:
+            # Near arm extended forward in Ditko web-shooter trigger gesture
+            # Far arm swept back for supersonic balance
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            # Far arm swept back
+            ctx.set_source_rgb(*SPIDER_BLUE_DARK)
+            ctx.set_line_width(6.2)
+            ctx.move_to(-6, -6)
+            ctx.line_to(-15, -2)
+            ctx.line_to(-24, 4)
+            ctx.stroke()
+            ctx.set_source_rgb(*SPIDER_RED_DARK)
+            ctx.arc(-24, 4, 3.2, 0, 2 * math.pi)
+            ctx.fill()
+
+            # Near arm extended forward in Ditko web-shooter trigger gesture
+            ctx.set_source_rgb(*SPIDER_BLUE)
+            ctx.set_line_width(7.2)
+            ctx.move_to(7, -5)
+            ctx.line_to(18, -4)
+            ctx.line_to(28, -3)
+            ctx.stroke()
+            ctx.set_source_rgb(*SPIDER_RED)
+            ctx.set_line_width(6.5)
+            ctx.move_to(20, -4)
+            ctx.line_to(28, -3)
+            ctx.stroke()
+            # Gloved wrist & Ditko trigger fingers
+            ctx.arc(28, -3, 3.4, 0, 2 * math.pi)
+            ctx.fill()
+            # Dual middle/ring fingers pressed to palm, index/pinky outstretched
+            ctx.set_source_rgb(*SPIDER_BLACK)
+            ctx.set_line_width(1.4)
+            ctx.move_to(28, -3)
+            ctx.line_to(32, -4)
+            ctx.stroke()
+            ctx.move_to(28, -3)
+            ctx.line_to(32, -2)
+            ctx.stroke()
+
+            # Dual silk speed trails streaming from shooter into target
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.9)
+            ctx.set_line_width(1.5)
+            ctx.move_to(31, -4)
+            ctx.line_to(45, -5)
+            ctx.stroke()
+            ctx.move_to(31, -2)
+            ctx.line_to(45, -1)
             ctx.stroke()
 
         elif self.is_perched:
-            # Planted hands on desktop surface
-            ctx.set_source_rgb(*SPIDER_BLUE)
-            ctx.set_line_width(6.5)
+            # Planted hands on desktop surface (THE ICONIC THIRD POINT OF CONTACT)
             ctx.set_line_cap(cairo.LINE_CAP_ROUND)
-            ctx.move_to(8, -6)
-            ctx.line_to(14, 10)
-            ctx.line_to(8, 26)
-            ctx.stroke()
-            ctx.set_source_rgb(*SPIDER_RED)
-            ctx.move_to(12, 18)
-            ctx.line_to(8, 27)
-            ctx.stroke()
-            # Far arm poised back
+            # Far arm poised bent over high rear knee
             ctx.set_source_rgb(*SPIDER_BLUE_DARK)
-            ctx.move_to(-8, -6)
-            ctx.line_to(-16, 4)
-            ctx.line_to(-12, 14)
+            ctx.set_line_width(6.2)
+            ctx.move_to(-8, -5)
+            ctx.line_to(-16, 2)
+            ctx.line_to(-11, 14)
             ctx.stroke()
             ctx.set_source_rgb(*SPIDER_RED_DARK)
             ctx.move_to(-14, 8)
-            ctx.line_to(-12, 16)
+            ctx.line_to(-11, 14)
             ctx.stroke()
+            ctx.arc(-11, 14, 3.0, 0, 2 * math.pi)
+            ctx.fill()
+
+            # Near arm: Planted firmly on the ground surface, fingers spread
+            ctx.set_source_rgb(*SPIDER_BLUE)
+            ctx.set_line_width(7.0)
+            ctx.move_to(8, -5)
+            ctx.line_to(15, 8)
+            ctx.line_to(10, 26)
+            ctx.stroke()
+            ctx.set_source_rgb(*SPIDER_RED)
+            ctx.set_line_width(6.2)
+            ctx.move_to(14, 16)
+            ctx.line_to(10, 26)
+            ctx.stroke()
+            # Glove palm planted
+            ctx.arc(10, 26, 3.4, 0, 2 * math.pi)
+            ctx.fill()
+            # Splayed finger setae gripping surface
+            ctx.set_line_width(1.6)
+            ctx.move_to(10, 26)
+            ctx.line_to(14, 27)
+            ctx.stroke()
+            ctx.move_to(10, 26)
+            ctx.line_to(11, 28)
+            ctx.stroke()
+            ctx.move_to(10, 26)
+            ctx.line_to(7, 27)
+            ctx.stroke()
+
+        elif self.state in (CharacterState.JUMP, CharacterState.FLY):
+            # Acrobatic aerial balance arms
+            is_ascending = (self.vy < 0.0)
+            
+            # Far arm (trailing back high in the wind)
+            ctx.set_source_rgb(*SPIDER_BLUE_DARK)
+            ctx.set_line_width(6.2)
+            ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+            far_sh = (-7.0, -7.0)
+            far_el = (-16.0, -12.0 if is_ascending else -4.0)
+            far_hd = (-24.0, -16.0 if is_ascending else 4.0)
+            ctx.move_to(far_sh[0], far_sh[1])
+            ctx.line_to(far_el[0], far_el[1])
+            ctx.line_to(far_hd[0], far_hd[1])
+            ctx.stroke()
+            ctx.set_source_rgb(*SPIDER_RED_DARK)
+            ctx.arc(far_hd[0], far_hd[1], 3.2, 0, 2 * math.pi)
+            ctx.fill()
+
+            # Near arm (reaching forward / downward in heroic trajectory)
+            ctx.set_source_rgb(*SPIDER_BLUE)
+            ctx.set_line_width(6.8)
+            near_sh = (7.0, -7.0)
+            near_el = (16.0, -4.0 if is_ascending else 4.0)
+            near_hd = (24.0, -2.0 if is_ascending else 12.0)
+            ctx.move_to(near_sh[0], near_sh[1])
+            ctx.line_to(near_el[0], near_el[1])
+            ctx.line_to(near_hd[0], near_hd[1])
+            ctx.stroke()
+            ctx.set_source_rgb(*SPIDER_RED)
+            ctx.arc(near_hd[0], near_hd[1], 3.5, 0, 2 * math.pi)
+            ctx.fill()
 
         elif is_firing_web:
             # =========================================================

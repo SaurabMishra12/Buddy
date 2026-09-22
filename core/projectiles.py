@@ -55,9 +55,7 @@ class DesktopProjectileWindow(Gtk.Window):
 
             css_provider = Gtk.CssProvider()
             css_provider.load_from_data(b"window { background-color: transparent; }")
-            Gtk.StyleContext.add_provider_for_screen(
-                screen, css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-            )
+            # Apply transparency only to this projectile window instance
             self.get_style_context().add_provider(
                 css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
             )
@@ -113,7 +111,7 @@ class DesktopProjectileWindow(Gtk.Window):
 
         # Dedicated full-length web rope overlay connecting hero wrist to projectile
         self.rope_window: Optional[WebRopeWindow] = None
-        if self.proj_type == "web":
+        if self.proj_type in ("web", "web_cocoon"):
             try:
                 self.rope_window = WebRopeWindow(
                     start_getter=self._get_owner_wrist,
@@ -142,7 +140,8 @@ class DesktopProjectileWindow(Gtk.Window):
 
     def _get_web_alpha(self) -> float:
         if self.state == "EXPLODING":
-            return max(0.0, 1.0 - self.explosion_frame / 16.0)
+            fade_div = 24.0 if self.proj_type == "web_cocoon" else 16.0
+            return max(0.0, 1.0 - self.explosion_frame / fade_div)
         return 1.0
 
     def _cleanup_rope(self) -> None:
@@ -153,6 +152,7 @@ class DesktopProjectileWindow(Gtk.Window):
     def destroy_projectile(self) -> None:
         self._cleanup_rope()
         try:
+            self.hide()
             self.destroy()
         except Exception:
             pass
@@ -193,7 +193,7 @@ class DesktopProjectileWindow(Gtk.Window):
             if hit_edge or hit_target:
                 # Screen edge or target collision!
                 self._trigger_collision()
-                if self.proj_type in ("fireball", "web"):
+                if self.proj_type in ("fireball", "web", "web_cocoon"):
                     self.state = "EXPLODING"
                     self.explosion_frame = 0
                 else:
@@ -226,17 +226,28 @@ class DesktopProjectileWindow(Gtk.Window):
                     audio_manager.play("fire")
                 elif self.proj_type == "shield":
                     audio_manager.play("smash")
+                elif self.proj_type == "batarang":
+                    audio_manager.play("grapple")
                 else:
                     audio_manager.play("lightning")
                 self._cleanup_rope()
-                self.destroy()
+                try:
+                    self.hide()
+                    self.destroy()
+                except Exception:
+                    pass
                 return False
 
         elif self.state == "EXPLODING":
             self.explosion_frame += 1
-            if self.explosion_frame > 14:
+            max_frames = 38 if self.proj_type == "web_cocoon" else 14
+            if self.explosion_frame > max_frames:
                 self._cleanup_rope()
-                self.destroy()
+                try:
+                    self.hide()
+                    self.destroy()
+                except Exception:
+                    pass
                 return False
 
         # Move the transparent window to current position
@@ -261,6 +272,10 @@ class DesktopProjectileWindow(Gtk.Window):
                 col = (0.85, 0.20, 1.0)
             elif self.proj_type in ("shield", "mjolnir", "unibeam"):
                 col = CYAN_GLOW
+            elif self.proj_type in ("web", "web_cocoon"):
+                col = (0.95, 0.98, 1.0)
+            elif self.proj_type == "batarang":
+                col = (0.85, 0.88, 0.95)
             else:
                 col = FIRE_YELLOW
             self.sparks.append({
@@ -272,13 +287,15 @@ class DesktopProjectileWindow(Gtk.Window):
                 "life": random.randint(12, 24)
             })
 
-        if self.proj_type in ("shield", "mjolnir", "fireball"):
+        if self.proj_type in ("shield", "mjolnir", "fireball", "batarang"):
             if self.proj_type == "shield":
                 audio_manager.play("smash")
             elif self.proj_type == "mjolnir":
                 audio_manager.play("lightning")
             elif self.proj_type == "fireball":
                 audio_manager.play("fire")
+            elif self.proj_type == "batarang":
+                audio_manager.play("grapple")
             self.state = "RETURNING"
             # Reverse bounce direction
             self.vx = -self.vx * 0.7
@@ -286,7 +303,7 @@ class DesktopProjectileWindow(Gtk.Window):
         elif self.proj_type == "power_blast":
             audio_manager.play("smash")
             self.state = "EXPLODING"
-        elif self.proj_type == "web":
+        elif self.proj_type in ("web", "web_cocoon"):
             audio_manager.play("thwip")
             self.state = "EXPLODING"
         else:
@@ -316,8 +333,10 @@ class DesktopProjectileWindow(Gtk.Window):
                 col = (0.75, 0.10, 0.95)
             elif self.proj_type in ("shield", "mjolnir", "unibeam"):
                 col = CYAN_GLOW
-            elif self.proj_type == "web":
+            elif self.proj_type in ("web", "web_cocoon"):
                 col = (0.92, 0.96, 1.0)
+            elif self.proj_type == "batarang":
+                col = (0.80, 0.85, 0.95)
             else:
                 col = FIRE_ORANGE
             ctx.set_source_rgba(col[0], col[1], col[2], self.shockwave_alpha)
@@ -385,6 +404,95 @@ class DesktopProjectileWindow(Gtk.Window):
                 ctx.set_source_rgba(1.0, 1.0, 1.0, alpha)
                 ctx.arc(0, 0, 3.8, 0, 2 * math.pi)
                 ctx.fill()
+                ctx.restore()
+
+            elif self.proj_type == "web_cocoon":
+                # SPIDER-MAN MULTI-THREADED WEB COCOON
+                # Spun silk capsule with 10 high-tension radial anchors and dynamic vibration
+                alpha = max(0.0, min(1.0, (38.0 - self.explosion_frame) / 9.0))
+                grow = min(1.0, self.explosion_frame / 4.0)
+                ctx.save()
+                ctx.translate(self.half_size, self.half_size)
+
+                # Subtle struggling vibration effect
+                vib_x = math.sin(self.explosion_frame * 2.8) * 1.5 * alpha
+                vib_y = math.cos(self.explosion_frame * 3.4) * 1.2 * alpha
+                ctx.translate(vib_x, vib_y)
+
+                # 1. 10 High-Tension Anchor Webs connecting cocoon to surrounding surfaces
+                anchor_rad = 50.0 * grow
+                ctx.set_source_rgba(0.92, 0.96, 1.0, alpha * 0.80)
+                ctx.set_line_width(1.5)
+                ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+                anchor_angles = [
+                    0.15, 0.65, 1.25, 1.95, 2.50, 3.20, 3.80, 4.45, 5.10, 5.80
+                ]
+                for aang in anchor_angles:
+                    ax = math.cos(aang) * anchor_rad
+                    ay = math.sin(aang) * anchor_rad
+                    ctx.move_to(0, 0)
+                    ctx.line_to(ax, ay)
+                    ctx.stroke()
+                    # Anchor attachment pads
+                    ctx.arc(ax, ay, 2.4, 0, 2 * math.pi)
+                    ctx.fill()
+
+                # 2. Outer Spun Silk Cloud / Luminous Glow
+                pat_glow = cairo.RadialGradient(0, 0, 6, 0, 0, 28.0 * grow)
+                pat_glow.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, alpha * 0.45)
+                pat_glow.add_color_stop_rgba(0.65, 0.88, 0.96, 1.0, alpha * 0.25)
+                pat_glow.add_color_stop_rgba(1.0, 0.70, 0.85, 1.0, 0.0)
+                ctx.set_source(pat_glow)
+                ctx.save()
+                ctx.scale(0.75, 1.25)
+                ctx.arc(0, 0, 22.0 * grow, 0, 2 * math.pi)
+                ctx.fill()
+                ctx.restore()
+
+                # 3. Dense Spun Silk Cocoon Core Capsule (Oval Mummy Cocoon)
+                pat_body = cairo.RadialGradient(-3, -4, 2, 0, 0, 20.0 * grow)
+                pat_body.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, alpha * 0.98)
+                pat_body.add_color_stop_rgba(0.55, 0.90, 0.96, 1.0, alpha * 0.92)
+                pat_body.add_color_stop_rgba(0.85, 0.78, 0.88, 0.98, alpha * 0.85)
+                pat_body.add_color_stop_rgba(1.0, 0.60, 0.75, 0.90, alpha * 0.50)
+                ctx.set_source(pat_body)
+                ctx.save()
+                ctx.scale(0.72, 1.30)
+                ctx.arc(0, 0, 18.0 * grow, 0, 2 * math.pi)
+                ctx.fill()
+                ctx.restore()
+
+                # 4. Multi-Layer Cross-Hatched Silk Binding Wraps
+                ctx.set_source_rgba(1.0, 1.0, 1.0, alpha * 0.95)
+                ctx.set_line_width(1.8)
+                for wrap_y in range(-15, 18, 5):
+                    wy = float(wrap_y) * grow
+                    w_span = math.sqrt(max(0.0, 200.0 - wy * wy * 0.45)) * 0.75
+                    # Diagonal cross-wrap 1
+                    ctx.new_path()
+                    ctx.move_to(-w_span, wy - 3.0)
+                    ctx.curve_to(-w_span * 0.5, wy + 2.0, w_span * 0.5, wy + 2.0, w_span, wy - 3.0)
+                    ctx.stroke()
+                    # Diagonal cross-wrap 2
+                    ctx.new_path()
+                    ctx.move_to(-w_span, wy + 3.0)
+                    ctx.curve_to(-w_span * 0.5, wy - 2.0, w_span * 0.5, wy - 2.0, w_span, wy + 3.0)
+                    ctx.stroke()
+
+                # 5. Heavy Structural Center Binding Reinforcement Band
+                ctx.set_source_rgba(0.92, 0.96, 1.0, alpha * 0.95)
+                ctx.set_line_width(3.2)
+                ctx.new_path()
+                ctx.move_to(-12.0 * grow, 0)
+                ctx.line_to(12.0 * grow, 0)
+                ctx.stroke()
+
+                # 6. Sticky Silk Knots and Surface Nodes
+                ctx.set_source_rgba(1.0, 1.0, 1.0, alpha)
+                for node_x, node_y in [(-6, -10), (7, -8), (-8, 6), (6, 12), (0, -18), (0, 18)]:
+                    ctx.arc(node_x * grow, node_y * grow, 2.2, 0, 2 * math.pi)
+                    ctx.fill()
+
                 ctx.restore()
             else:
                 # Explosion blast
@@ -631,4 +739,92 @@ class DesktopProjectileWindow(Gtk.Window):
             ctx.close_path()
             ctx.stroke()
 
+            ctx.restore()
+
+        elif self.proj_type == "web_cocoon":
+            # Spider-Man High-Velocity Spun Cocoon Spindle
+            ctx.save()
+            # Trailing dual spiral web wisps
+            ctx.set_source_rgba(0.92, 0.96, 1.0, 0.75 * alpha)
+            ctx.set_line_width(1.6)
+            for t_angle, t_len in [(-2.8, 28.0), (-3.14, 34.0), (-3.4, 26.0)]:
+                ctx.new_path()
+                ctx.move_to(0, 0)
+                tx1 = math.cos(t_angle) * (t_len * 0.5)
+                ty1 = math.sin(t_angle) * (t_len * 0.5) + math.sin(self.angle * 8.0) * 4.0
+                tx2 = math.cos(t_angle) * t_len
+                ty2 = math.sin(t_angle) * t_len + math.sin(self.angle * 8.0 + 1.4) * 6.0
+                ctx.curve_to(tx1, ty1, tx1, ty1, tx2, ty2)
+                ctx.stroke()
+
+            # Spinning Cocoon Spindle Capsule
+            ctx.rotate(self.angle * 5.5)
+            # Outer web mist halo
+            ctx.set_source_rgba(0.85, 0.92, 1.0, 0.40 * alpha)
+            ctx.save()
+            ctx.scale(1.0, 0.65)
+            ctx.arc(0, 0, 18.0, 0, 2 * math.pi)
+            ctx.fill()
+            ctx.restore()
+
+            # Dense woven silk core
+            pat_cocoon = cairo.RadialGradient(0, 0, 2, 0, 0, 14.0)
+            pat_cocoon.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, 1.0 * alpha)
+            pat_cocoon.add_color_stop_rgba(0.60, 0.92, 0.96, 1.0, 0.95 * alpha)
+            pat_cocoon.add_color_stop_rgba(1.0, 0.75, 0.85, 1.0, 0.50 * alpha)
+            ctx.set_source(pat_cocoon)
+            ctx.save()
+            ctx.scale(1.2, 0.7)
+            ctx.arc(0, 0, 12.0, 0, 2 * math.pi)
+            ctx.fill()
+            ctx.restore()
+
+            # Helical wrapping silk bands around spindle
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95 * alpha)
+            ctx.set_line_width(1.8)
+            for h_offset in [-8.0, -4.0, 0.0, 4.0, 8.0]:
+                ctx.new_path()
+                ctx.arc(h_offset, 0, 6.5, -math.pi * 0.4, math.pi * 0.4)
+                ctx.stroke()
+
+            ctx.restore()
+
+        elif self.proj_type == "batarang":
+            # Batman's Aerodynamic Carbon-Titanium Batarang
+            ctx.save()
+            # Outer dark stealth carbon silhouette
+            ctx.set_source_rgba(0.08, 0.08, 0.10, 0.95 * alpha)
+            ctx.new_path()
+            ctx.move_to(-22, 0)
+            ctx.curve_to(-16, -14, -6, -16, 0, -6)
+            ctx.curve_to(6, -16, 16, -14, 22, 0)
+            ctx.curve_to(14, 6, 6, 8, 0, 4)
+            ctx.curve_to(-6, 8, -14, 6, -22, 0)
+            ctx.close_path()
+            ctx.fill()
+
+            # Specular metallic beveled blade facets
+            pat_bat = cairo.LinearGradient(-22, -14, 22, 8)
+            pat_bat.add_color_stop_rgba(0.0, 0.45, 0.48, 0.55, 0.95 * alpha)
+            pat_bat.add_color_stop_rgba(0.4, 0.22, 0.24, 0.28, 0.95 * alpha)
+            pat_bat.add_color_stop_rgba(1.0, 0.10, 0.12, 0.15, 0.95 * alpha)
+            ctx.set_source(pat_bat)
+            ctx.new_path()
+            ctx.move_to(-20, 0)
+            ctx.curve_to(-14, -12, -5, -13, 0, -5)
+            ctx.curve_to(5, -13, 14, -12, 20, 0)
+            ctx.curve_to(12, 5, 5, 6, 0, 3)
+            ctx.curve_to(-5, 6, -12, 5, -20, 0)
+            ctx.close_path()
+            ctx.fill()
+
+            # Razor-sharp silver bevel perimeter line
+            ctx.set_source_rgba(0.85, 0.90, 0.98, 0.85 * alpha)
+            ctx.set_line_width(1.0)
+            ctx.stroke()
+
+            # Central golden Bat-insignia core / hinge button
+            ctx.set_source_rgba(0.85, 0.72, 0.18, 0.95 * alpha)
+            ctx.arc(0, -1, 2.6, 0, 2 * math.pi)
+            ctx.fill()
             ctx.restore()

@@ -755,9 +755,6 @@ class BuddyEngine:
             target_x = self.cursor_x
             target_y = self.cursor_y
 
-            from core.platforms import platform_manager
-            platform_manager.register_user_click_ledge(target_x, target_y)
-
             if hasattr(self.character, "nav_to"):
                 self.character.nav_to(target_x, target_y)
             elif skin in ("superman", "thor", "ironman", "dragon", "harry_potter", "thanos"):

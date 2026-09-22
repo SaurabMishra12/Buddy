@@ -9,7 +9,8 @@
     "grapple",
     "cape_glide",
     "batarang",
-    "perch"
+    "perch",
+    "smoke_bomb"
   ],
   "sound_theme": "grapple"
 }

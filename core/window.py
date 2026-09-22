@@ -283,9 +283,7 @@ class WebRopeWindow(Gtk.Window):
 
             css_provider = Gtk.CssProvider()
             css_provider.load_from_data(b"window { background-color: transparent; }")
-            Gtk.StyleContext.add_provider_for_screen(
-                self.screen, css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-            )
+            # Apply transparent styling only to this window instance to prevent desktop re-theme flicker
             self.get_style_context().add_provider(
                 css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
             )
@@ -333,6 +331,7 @@ class WebRopeWindow(Gtk.Window):
         if not self.is_destroyed:
             self.is_destroyed = True
             try:
+                self.hide()
                 self.destroy()
             except Exception:
                 pass

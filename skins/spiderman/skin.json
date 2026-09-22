@@ -8,9 +8,13 @@
   "abilities": [
     "web_swing",
     "web_throw",
+    "web_cocoon",
+    "swing_attack",
     "spider_sense",
     "wall_crawl",
-    "perch"
+    "perch",
+    "upside_down_hang",
+    "seat"
   ],
   "sound_theme": "thwip"
 }
