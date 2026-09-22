@@ -203,6 +203,7 @@ class BuddyEngine:
         self.is_chasing = False
         self.is_spinning = False
         self.window.move_to(self.character.x, self.character.y)
+        self.window.queue_draw()
 
         print(f"[Buddy Engine] Switched to skin: {norm_id.upper()}")
         return True
@@ -251,6 +252,7 @@ class BuddyEngine:
         """Adjust character scale."""
         self.character.scale = max(0.5, min(2.5, scale))
         self.config.set("scale", self.character.scale)
+        self.window.queue_draw()
 
     def trigger_signature_ability(self) -> None:
         """Triggers character-specific signature move on double click!"""
