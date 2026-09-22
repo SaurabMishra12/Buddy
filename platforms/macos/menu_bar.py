@@ -13,23 +13,12 @@ from pomodoro.manager import PomodoroState
 class MenuActionTarget(NSObject):
     """Reusable Obj-C target for dispatching NSMenuItem callbacks."""
 
-    def initWithCallback_(self, callback):
-        self = objc_super(MenuActionTarget, self).init()
-        if self is None:
-            return None
-        self.callback = callback
-        return self
-
     def onAction_(self, sender):
-        if self.callback:
+        if hasattr(self, "callback") and self.callback:
             try:
                 self.callback(sender)
             except Exception as e:
-                print(f"[Buddy Menu] Error executing menu callback: {e}")
-
-
-def objc_super(cls, inst):
-    return super(cls, inst)
+                print(f"[Buddy Menu] Error executing menu callback: {e}", file=sys.stderr)
 
 
 class MacOSMenuBar:
@@ -43,19 +32,21 @@ class MacOSMenuBar:
         # Retain targets to prevent garbage collection
         self._targets = []
 
-        # Configure menu bar button
+        # Configure menu bar button with crisp native SF Symbol
         button = self.status_item.button()
         if button:
-            # Try to load paw icon or set title
-            icon_path = Path(__file__).resolve().parent.parent.parent / "assets" / "icons" / "buddy.png"
-            if icon_path.exists():
-                img = AppKit.NSImage.alloc().initWithContentsOfFile_(str(icon_path))
-                if img:
-                    img.setSize_(NSSize(18, 18))
-                    img.setTemplate_(True)
-                    button.setImage_(img)
-                else:
-                    button.setTitle_("🐾")
+            button.setToolTip_("Buddy Desktop Companion")
+            icon = None
+            for sym_name in ("pawprint.fill", "sparkles", "bolt.fill"):
+                try:
+                    icon = AppKit.NSImage.imageWithSystemSymbolName_accessibilityDescription_(sym_name, "Buddy")
+                    if icon:
+                        break
+                except Exception:
+                    pass
+
+            if icon:
+                button.setImage_(icon)
             else:
                 button.setTitle_("🐾")
 
@@ -64,7 +55,8 @@ class MacOSMenuBar:
     def _create_item(self, title: str, callback: Optional[Any] = None) -> AppKit.NSMenuItem:
         item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, None, "")
         if callback:
-            target = MenuActionTarget.alloc().initWithCallback_(callback)
+            target = MenuActionTarget.alloc().init()
+            target.callback = callback
             self._targets.append(target)
             item.setTarget_(target)
             item.setAction_("onAction:")

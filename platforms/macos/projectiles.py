@@ -10,7 +10,9 @@ import AppKit
 from Foundation import NSPoint, NSRect, NSSize, NSObject, NSTimer, NSRunLoop, NSRunLoopCommonModes
 from Quartz import (
     CGColorSpaceCreateDeviceRGB, CGDataProviderCreateWithData, CGImageCreate,
-    CGContextDrawImage, kCGBitmapByteOrder32Host, kCGImageAlphaPremultipliedFirst
+    CGContextDrawImage, CGContextSaveGState, CGContextRestoreGState,
+    CGContextTranslateCTM, CGContextScaleCTM,
+    kCGBitmapByteOrder32Host, kCGImageAlphaPremultipliedFirst
 )
 
 from core.particles import CYAN_GLOW, BLUE_GLOW, FIRE_ORANGE, FIRE_YELLOW
@@ -49,7 +51,11 @@ class ProjectileView(AppKit.NSView):
         )
         if cg_img:
             ns_ctx = AppKit.NSGraphicsContext.currentContext().CGContext()
+            CGContextSaveGState(ns_ctx)
+            CGContextTranslateCTM(ns_ctx, 0, rect.size.height)
+            CGContextScaleCTM(ns_ctx, 1.0, -1.0)
             CGContextDrawImage(ns_ctx, rect, cg_img)
+            CGContextRestoreGState(ns_ctx)
 
 
 class ProjTimerTarget(NSObject):
