@@ -1,4 +1,4 @@
-"""Native macOS UI dialogs and popup context menus using AppKit."""
+"""Classic native Apple macOS UI dialogs and popup context menus using AppKit."""
 
 import sys
 from pathlib import Path
@@ -33,12 +33,14 @@ def show_macos_context_menu(engine: Any, event: Any) -> None:
 
     menu = AppKit.NSMenu.alloc().init()
     menu.setAutoenablesItems_(False)
+    local_targets: List[Any] = []
 
     def add_item(title: str, cb=None, parent_menu=menu):
         item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, None, "")
         if cb:
             target = MenuActionTarget.alloc().init()
             target.callback = cb
+            local_targets.append(target)
             _active_menu_targets.append(target)
             item.setTarget_(target)
             item.setAction_("onAction:")
@@ -47,7 +49,7 @@ def show_macos_context_menu(engine: Any, event: Any) -> None:
 
     # 1. Signature Move
     add_item("⚡ Perform Signature Move", lambda _: engine.trigger_signature_ability())
-    add_item("➡️ Next Character (Scroll / Middle-Click)", lambda _: engine.next_skin())
+    add_item("➡️ Next Character (Scroll Wheel / Middle-Click)", lambda _: engine.next_skin())
     menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
     # 2. Switch Skin Submenu
@@ -68,7 +70,7 @@ def show_macos_context_menu(engine: Any, event: Any) -> None:
     # 3. Abilities Submenu
     skin_meta = skin_manager.get_metadata(cur_id)
     if skin_meta and skin_meta.get("abilities"):
-        ab_sub = add_item("✨ Abilities")
+        ab_sub = add_item("✨ Abilities & Stunts")
         ab_menu = AppKit.NSMenu.alloc().init()
         for ab in skin_meta["abilities"]:
             add_item(
@@ -101,16 +103,16 @@ def show_macos_context_menu(engine: Any, event: Any) -> None:
 
     # 5. Modes & Preferences
     add_item(
-        f"{'✓ ' if engine.click_through else '   '}👻 Click-Through Mode",
+        f"{'✓ ' if engine.click_through else '   '}Click-Through Mode (Ghost)",
         lambda _: engine.toggle_click_through()
     )
     add_item(
-        f"{'✓ ' if not engine.audio.enabled else '   '}🔇 Quiet Mode (Mute)",
+        f"{'✓ ' if not engine.audio.enabled else '   '}Quiet Mode (Mute)",
         lambda _: _toggle_sound(engine, not engine.audio.enabled)
     )
 
     # Scale submenu
-    scale_sub = add_item("🔍 Pet Scale")
+    scale_sub = add_item("🔍 Companion Scale")
     scale_menu = AppKit.NSMenu.alloc().init()
     cur_sc = getattr(engine.character, "scale", 1.0)
     for label, sc in [("Small (0.75x)", 0.75), ("Normal (1.0x)", 1.0), ("Large (1.35x)", 1.35), ("Giant (1.75x)", 1.75)]:
@@ -125,13 +127,15 @@ def show_macos_context_menu(engine: Any, event: Any) -> None:
     menu.addItem_(AppKit.NSMenuItem.separatorItem())
     add_item("❌ Quit Buddy", lambda _: AppKit.NSApplication.sharedApplication().terminate_(None))
 
+    menu._retained_targets = local_targets
+
     ns_event = getattr(event, "ns_event", None)
     if ns_event and hasattr(engine.window, "view"):
         AppKit.NSMenu.popUpContextMenu_withEvent_forView_(menu, ns_event, engine.window.view)
 
 
 # ============================================================================
-# Target Handlers (Must be defined at module level in PyObjC)
+# Target Handlers
 # ============================================================================
 
 class SettingsDialogTarget(NSObject):
@@ -245,12 +249,14 @@ class StatsDialogTarget(NSObject):
 
 
 # ============================================================================
-# Modern Character Gallery Dialog
+# Classic Apple Character Gallery Dialog
 # ============================================================================
 
 def show_macos_skin_selector(engine: Any, parent=None) -> None:
-    """Show rich, visual native macOS Character Skin Gallery."""
-    win_w, win_h = 720, 520
+    """Show classic Apple design native Character Skin Gallery."""
+    AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+
+    win_w, win_h = 740, 520
     style = (
         AppKit.NSWindowStyleMaskTitled |
         AppKit.NSWindowStyleMaskClosable |
@@ -260,11 +266,19 @@ def show_macos_skin_selector(engine: Any, parent=None) -> None:
     win = AppKit.NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
         frame, style, AppKit.NSBackingStoreBuffered, False
     )
-    win.setTitle_("Buddy 2.0 — Character Skin Gallery")
+    win.setTitle_("Buddy Companions — Character Gallery")
     win.center()
     _active_dialogs.append(win)
 
     content = win.contentView()
+
+    # Classic Apple Frosted Glass / Vibrancy Backdrop
+    backdrop = AppKit.NSVisualEffectView.alloc().initWithFrame_(content.bounds())
+    backdrop.setMaterial_(AppKit.NSVisualEffectMaterialUnderWindowBackground)
+    backdrop.setBlendingMode_(AppKit.NSVisualEffectBlendingModeBehindWindow)
+    backdrop.setState_(AppKit.NSVisualEffectStateActive)
+    backdrop.setAutoresizingMask_(AppKit.NSViewWidthSizable | AppKit.NSViewHeightSizable)
+    content.addSubview_(backdrop)
 
     all_skins = skin_manager.get_available_skins()
     filtered_skins: List[Dict[str, Any]] = list(all_skins)
@@ -273,37 +287,54 @@ def show_macos_skin_selector(engine: Any, parent=None) -> None:
     target._win = win
     _active_dialogs.append(target)
 
-    # 1. Top Controls Bar: Search + Category Segments
-    search_field = AppKit.NSSearchField.alloc().initWithFrame_(NSRect(NSPoint(20, win_h - 48), NSSize(230, 28)))
-    search_field.setPlaceholderString_("Search companion or ability...")
+    # 1. Header with Classic Apple Typography
+    lbl_hdr = AppKit.NSTextField.labelWithString_("Companion Gallery")
+    lbl_hdr.setFrame_(NSRect(NSPoint(24, win_h - 44), NSSize(300, 26)))
+    lbl_hdr.setFont_(AppKit.NSFont.systemFontOfSize_weight_(19.0, AppKit.NSFontWeightBold))
+    lbl_hdr.setTextColor_(AppKit.NSColor.labelColor())
+    backdrop.addSubview_(lbl_hdr)
+
+    lbl_sub = AppKit.NSTextField.labelWithString_("Choose an animated desktop pet with unique physics and abilities.")
+    lbl_sub.setFrame_(NSRect(NSPoint(24, win_h - 66), NSSize(420, 20)))
+    lbl_sub.setFont_(AppKit.NSFont.systemFontOfSize_weight_(12.0, AppKit.NSFontWeightRegular))
+    lbl_sub.setTextColor_(AppKit.NSColor.secondaryLabelColor())
+    backdrop.addSubview_(lbl_sub)
+
+    # 2. Controls Bar: Search Field + Category Segmented Control
+    search_field = AppKit.NSSearchField.alloc().initWithFrame_(NSRect(NSPoint(24, win_h - 104), NSSize(230, 28)))
+    search_field.setPlaceholderString_("Search companions...")
+    search_field.setFont_(AppKit.NSFont.systemFontOfSize_(12.5))
     search_field.setTarget_(target)
     search_field.setAction_("onSearchChange:")
-    content.addSubview_(search_field)
+    backdrop.addSubview_(search_field)
 
     categories = ["All", "Heroes", "Animals", "Fantasy", "Sci-Fi", "Cute"]
-    seg = AppKit.NSSegmentedControl.alloc().initWithFrame_(NSRect(NSPoint(260, win_h - 48), NSSize(win_w - 280, 28)))
+    seg = AppKit.NSSegmentedControl.alloc().initWithFrame_(NSRect(NSPoint(268, win_h - 104), NSSize(win_w - 292, 28)))
     seg.setSegmentCount_(len(categories))
+    seg.setSegmentStyle_(AppKit.NSSegmentStyleTexturedRounded)
     for i, cat in enumerate(categories):
         seg.setLabel_forSegment_(cat, i)
-        seg.setWidth_forSegment_(0, i)  # Auto-fit
+        seg.setWidth_forSegment_(0, i)
     seg.setSelectedSegment_(0)
     seg.setTarget_(target)
     seg.setAction_("onCategoryChange:")
-    content.addSubview_(seg)
+    backdrop.addSubview_(seg)
 
-    # 2. Left Side: Scrollable Table View
-    table_w = 260
-    scroll = AppKit.NSScrollView.alloc().initWithFrame_(NSRect(NSPoint(20, 68), NSSize(table_w, win_h - 130)))
+    # 3. Left Side: Scrollable Table View
+    table_w = 230
+    scroll_h = win_h - 176
+    scroll = AppKit.NSScrollView.alloc().initWithFrame_(NSRect(NSPoint(24, 60), NSSize(table_w, scroll_h)))
     scroll.setHasVerticalScroller_(True)
     scroll.setBorderType_(AppKit.NSBezelBorder)
 
-    table_view = AppKit.NSTableView.alloc().initWithFrame_(scroll.contentRect())
+    table_view = AppKit.NSTableView.alloc().initWithFrame_(scroll.contentView().bounds())
     col = AppKit.NSTableColumn.alloc().initWithIdentifier_("companion")
-    col.setWidth_(table_w - 24)
-    col.setTitle_("Characters (22)")
+    col.setWidth_(table_w - 20)
+    col.setTitle_("Companions (22)")
     table_view.addTableColumn_(col)
-    table_view.setHeaderView_(None)  # Minimalist modern list
-    table_view.setRowHeight_(28.0)
+    table_view.setHeaderView_(None)
+    table_view.setRowHeight_(30.0)
+    table_view.setSelectionHighlightStyle_(AppKit.NSTableViewSelectionHighlightStyleRegular)
 
     src = GalleryTableSource.alloc().init()
     src.items = filtered_skins
@@ -313,59 +344,62 @@ def show_macos_skin_selector(engine: Any, parent=None) -> None:
     table_view.setAction_("onTableSelect:")
     table_view.setDoubleAction_("onTableDoubleClick:")
     scroll.setDocumentView_(table_view)
-    content.addSubview_(scroll)
+    backdrop.addSubview_(scroll)
 
-    # 3. Right Side: Character Detail Card
-    card_x = table_w + 36
-    card_w = win_w - card_x - 20
-    card_h = win_h - 130
+    # 4. Right Side: Character Detail Card
+    card_x = table_w + 38
+    card_w = win_w - card_x - 24
+    card_h = scroll_h
 
-    card_view = AppKit.NSBox.alloc().initWithFrame_(NSRect(NSPoint(card_x, 68), NSSize(card_w, card_h)))
+    card_view = AppKit.NSBox.alloc().initWithFrame_(NSRect(NSPoint(card_x, 60), NSSize(card_w, card_h)))
     card_view.setTitlePosition_(AppKit.NSNoTitle)
-    card_view.setBoxType_(AppKit.NSBoxTypeCustom)
-    card_view.setFillColor_(AppKit.NSColor.windowBackgroundColor())
+    card_view.setBoxType_(AppKit.NSBoxCustom)
+    card_view.setFillColor_(AppKit.NSColor.controlBackgroundColor())
     card_view.setBorderColor_(AppKit.NSColor.separatorColor())
     card_view.setBorderWidth_(1.0)
-    card_view.setCornerRadius_(8.0)
-    content.addSubview_(card_view)
+    card_view.setCornerRadius_(10.0)
+    backdrop.addSubview_(card_view)
 
-    # Card subviews
     lbl_title = AppKit.NSTextField.labelWithString_("")
-    lbl_title.setFrame_(NSRect(NSPoint(18, card_h - 44), NSSize(card_w - 36, 30)))
-    lbl_title.setFont_(AppKit.NSFont.boldSystemFontOfSize_(18))
+    lbl_title.setFrame_(NSRect(NSPoint(20, card_h - 44), NSSize(card_w - 40, 28)))
+    lbl_title.setFont_(AppKit.NSFont.systemFontOfSize_weight_(20.0, AppKit.NSFontWeightBold))
+    lbl_title.setTextColor_(AppKit.NSColor.labelColor())
     card_view.addSubview_(lbl_title)
 
     lbl_badges = AppKit.NSTextField.labelWithString_("")
-    lbl_badges.setFrame_(NSRect(NSPoint(18, card_h - 70), NSSize(card_w - 36, 22)))
-    lbl_badges.setFont_(AppKit.NSFont.systemFontOfSize_(12))
+    lbl_badges.setFrame_(NSRect(NSPoint(20, card_h - 70), NSSize(card_w - 40, 20)))
+    lbl_badges.setFont_(AppKit.NSFont.systemFontOfSize_weight_(12.0, AppKit.NSFontWeightMedium))
+    lbl_badges.setTextColor_(AppKit.NSColor.secondaryLabelColor())
     card_view.addSubview_(lbl_badges)
 
-    # Lore / Description scroll
-    desc_scroll = AppKit.NSScrollView.alloc().initWithFrame_(NSRect(NSPoint(18, card_h - 220), NSSize(card_w - 36, 140)))
+    # Description scroll view
+    desc_scroll = AppKit.NSScrollView.alloc().initWithFrame_(NSRect(NSPoint(20, card_h - 200), NSSize(card_w - 40, 120)))
     desc_scroll.setHasVerticalScroller_(True)
     desc_scroll.setBorderType_(AppKit.NSNoBorder)
     desc_scroll.setDrawsBackground_(False)
 
-    desc_text = AppKit.NSTextView.alloc().initWithFrame_(desc_scroll.contentRect())
+    desc_text = AppKit.NSTextView.alloc().initWithFrame_(desc_scroll.contentView().bounds())
     desc_text.setEditable_(False)
     desc_text.setSelectable_(True)
     desc_text.setDrawsBackground_(False)
     desc_text.setFont_(AppKit.NSFont.systemFontOfSize_(12.5))
+    desc_text.setTextColor_(AppKit.NSColor.labelColor())
     desc_scroll.setDocumentView_(desc_text)
     card_view.addSubview_(desc_scroll)
 
-    # Abilities title & list
-    lbl_ab_hdr = AppKit.NSTextField.labelWithString_("✨ Special Abilities & Stunts:")
-    lbl_ab_hdr.setFrame_(NSRect(NSPoint(18, card_h - 250), NSSize(card_w - 36, 20)))
-    lbl_ab_hdr.setFont_(AppKit.NSFont.boldSystemFontOfSize_(12.5))
+    # Abilities Header
+    lbl_ab_hdr = AppKit.NSTextField.labelWithString_("✨ Special Moves & Acrobatics:")
+    lbl_ab_hdr.setFrame_(NSRect(NSPoint(20, card_h - 228), NSSize(card_w - 40, 20)))
+    lbl_ab_hdr.setFont_(AppKit.NSFont.systemFontOfSize_weight_(12.5, AppKit.NSFontWeightSemibold))
+    lbl_ab_hdr.setTextColor_(AppKit.NSColor.labelColor())
     card_view.addSubview_(lbl_ab_hdr)
 
     lbl_abilities = AppKit.NSTextField.labelWithString_("")
-    lbl_abilities.setFrame_(NSRect(NSPoint(18, 16), NSSize(card_w - 36, card_h - 275)))
-    lbl_abilities.setFont_(AppKit.NSFont.systemFontOfSize_(12))
+    lbl_abilities.setFrame_(NSRect(NSPoint(20, 16), NSSize(card_w - 40, card_h - 250)))
+    lbl_abilities.setFont_(AppKit.NSFont.systemFontOfSize_(12.0))
+    lbl_abilities.setTextColor_(AppKit.NSColor.secondaryLabelColor())
     card_view.addSubview_(lbl_abilities)
 
-    # 4. Helper closures for filtering and card updates
     def update_card():
         row = table_view.selectedRow()
         if 0 <= row < len(src.items):
@@ -425,22 +459,23 @@ def show_macos_skin_selector(engine: Any, parent=None) -> None:
     target._apply_cb = apply_selection
 
     # 5. Bottom Buttons
-    btn_close = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(win_w - 260, 18), NSSize(90, 32)))
+    btn_close = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(win_w - 256, 16), NSSize(90, 32)))
     btn_close.setTitle_("Close")
     btn_close.setBezelStyle_(AppKit.NSBezelStyleRounded)
+    btn_close.setKeyEquivalent_("\x1b")
     btn_close.setTarget_(target)
     btn_close.setAction_("onClose:")
-    content.addSubview_(btn_close)
+    backdrop.addSubview_(btn_close)
 
-    btn_apply = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(win_w - 156, 18), NSSize(136, 32)))
+    btn_apply = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(win_w - 156, 16), NSSize(136, 32)))
     btn_apply.setTitle_("Select Companion")
     btn_apply.setBezelStyle_(AppKit.NSBezelStyleRounded)
     btn_apply.setKeyEquivalent_("\r")
     btn_apply.setTarget_(target)
     btn_apply.setAction_("onApply:")
-    content.addSubview_(btn_apply)
+    backdrop.addSubview_(btn_apply)
 
-    # Initial selection: highlight current character
+    # Initial selection
     initial_idx = 0
     cur_id = engine.character.skin_id
     for i, s in enumerate(filtered_skins):
@@ -451,16 +486,19 @@ def show_macos_skin_selector(engine: Any, parent=None) -> None:
     update_card()
 
     win.makeKeyAndOrderFront_(None)
+    win.orderFrontRegardless()
 
 
 # ============================================================================
-# Modern Preferences Dialog
+# Classic Apple Preferences Dialog
 # ============================================================================
 
 def show_macos_settings_dialog(engine: Any, parent=None) -> None:
-    """Show tabbed, modern preferences dialog."""
+    """Show classic Apple design native Preferences dialog."""
+    AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+
     cfg = engine.config
-    win_w, win_h = 520, 400
+    win_w, win_h = 520, 420
 
     style = (
         AppKit.NSWindowStyleMaskTitled |
@@ -475,7 +513,22 @@ def show_macos_settings_dialog(engine: Any, parent=None) -> None:
     _active_dialogs.append(win)
 
     content = win.contentView()
-    tabs = AppKit.NSTabView.alloc().initWithFrame_(NSRect(NSPoint(16, 64), NSSize(win_w - 32, win_h - 84)))
+
+    backdrop = AppKit.NSVisualEffectView.alloc().initWithFrame_(content.bounds())
+    backdrop.setMaterial_(AppKit.NSVisualEffectMaterialUnderWindowBackground)
+    backdrop.setBlendingMode_(AppKit.NSVisualEffectBlendingModeBehindWindow)
+    backdrop.setState_(AppKit.NSVisualEffectStateActive)
+    backdrop.setAutoresizingMask_(AppKit.NSViewWidthSizable | AppKit.NSViewHeightSizable)
+    content.addSubview_(backdrop)
+
+    # Header
+    lbl_hdr = AppKit.NSTextField.labelWithString_("Preferences")
+    lbl_hdr.setFrame_(NSRect(NSPoint(24, win_h - 40), NSSize(200, 24)))
+    lbl_hdr.setFont_(AppKit.NSFont.systemFontOfSize_weight_(18.0, AppKit.NSFontWeightBold))
+    lbl_hdr.setTextColor_(AppKit.NSColor.labelColor())
+    backdrop.addSubview_(lbl_hdr)
+
+    tabs = AppKit.NSTabView.alloc().initWithFrame_(NSRect(NSPoint(16, 56), NSSize(win_w - 32, win_h - 100)))
 
     target = SettingsDialogTarget.alloc().init()
     target._win = win
@@ -487,11 +540,12 @@ def show_macos_settings_dialog(engine: Any, parent=None) -> None:
     v1 = AppKit.NSView.alloc().initWithFrame_(tabs.contentRect())
 
     # Default character popup
-    lbl_skin = AppKit.NSTextField.labelWithString_("Default Character:")
-    lbl_skin.setFrame_(NSRect(NSPoint(20, 220), NSSize(140, 24)))
+    lbl_skin = AppKit.NSTextField.labelWithString_("Default Companion:")
+    lbl_skin.setFrame_(NSRect(NSPoint(20, 230), NSSize(150, 24)))
+    lbl_skin.setFont_(AppKit.NSFont.systemFontOfSize_weight_(13.0, AppKit.NSFontWeightMedium))
     v1.addSubview_(lbl_skin)
 
-    skin_popup = AppKit.NSPopUpButton.alloc().initWithFrame_pullsDown_(NSRect(NSPoint(160, 218), NSSize(220, 26)), False)
+    skin_popup = AppKit.NSPopUpButton.alloc().initWithFrame_pullsDown_(NSRect(NSPoint(180, 228), NSSize(230, 26)), False)
     skins = skin_manager.get_available_skins()
     for s in skins:
         skin_popup.addItemWithTitle_(s.get("name", s["id"]))
@@ -502,13 +556,14 @@ def show_macos_settings_dialog(engine: Any, parent=None) -> None:
             break
     v1.addSubview_(skin_popup)
 
-    # Scale slider with dynamic label
+    # Scale slider
     cur_scale = float(cfg.get("scale", 1.0))
     lbl_scale = AppKit.NSTextField.labelWithString_(f"Scale: {int(cur_scale * 100)}%")
-    lbl_scale.setFrame_(NSRect(NSPoint(20, 170), NSSize(130, 24)))
+    lbl_scale.setFrame_(NSRect(NSPoint(20, 175), NSSize(150, 24)))
+    lbl_scale.setFont_(AppKit.NSFont.systemFontOfSize_weight_(13.0, AppKit.NSFontWeightMedium))
     v1.addSubview_(lbl_scale)
 
-    scale_slider = AppKit.NSSlider.alloc().initWithFrame_(NSRect(NSPoint(160, 170), NSSize(220, 24)))
+    scale_slider = AppKit.NSSlider.alloc().initWithFrame_(NSRect(NSPoint(180, 175), NSSize(230, 24)))
     scale_slider.setMinValue_(0.5)
     scale_slider.setMaxValue_(2.0)
     scale_slider.setDoubleValue_(cur_scale)
@@ -517,13 +572,14 @@ def show_macos_settings_dialog(engine: Any, parent=None) -> None:
     target._lbl_scale = lbl_scale
     v1.addSubview_(scale_slider)
 
-    # Volume slider with dynamic label
+    # Volume slider
     cur_vol = float(cfg.get("sound_volume", 0.7))
     lbl_vol = AppKit.NSTextField.labelWithString_(f"Volume: {int(cur_vol * 100)}%")
-    lbl_vol.setFrame_(NSRect(NSPoint(20, 120), NSSize(130, 24)))
+    lbl_vol.setFrame_(NSRect(NSPoint(20, 120), NSSize(150, 24)))
+    lbl_vol.setFont_(AppKit.NSFont.systemFontOfSize_weight_(13.0, AppKit.NSFontWeightMedium))
     v1.addSubview_(lbl_vol)
 
-    vol_slider = AppKit.NSSlider.alloc().initWithFrame_(NSRect(NSPoint(160, 120), NSSize(220, 24)))
+    vol_slider = AppKit.NSSlider.alloc().initWithFrame_(NSRect(NSPoint(180, 120), NSSize(230, 24)))
     vol_slider.setMinValue_(0.0)
     vol_slider.setMaxValue_(1.0)
     vol_slider.setDoubleValue_(cur_vol)
@@ -534,44 +590,47 @@ def show_macos_settings_dialog(engine: Any, parent=None) -> None:
 
     # Autostart checkbox
     autostart_mgr = MacOSAutostart()
-    chk_autostart = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(20, 60), NSSize(360, 24)))
+    chk_autostart = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(20, 50), NSSize(400, 24)))
     chk_autostart.setButtonType_(AppKit.NSButtonTypeSwitch)
     chk_autostart.setTitle_("Start Buddy automatically on login (LaunchAgent)")
+    chk_autostart.setFont_(AppKit.NSFont.systemFontOfSize_(12.5))
     chk_autostart.setState_(1 if autostart_mgr.is_enabled() else 0)
     v1.addSubview_(chk_autostart)
 
     tab1.setView_(v1)
     tabs.addTabViewItem_(tab1)
 
-    # --- TAB 2: Appearance & Effects ---
+    # --- TAB 2: Effects & Performance ---
     tab2 = AppKit.NSTabViewItem.alloc().initWithIdentifier_("effects")
     tab2.setLabel_("Effects & Performance")
     v2 = AppKit.NSView.alloc().initWithFrame_(tabs.contentRect())
 
-    chk_particles = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(20, 210), NSSize(360, 24)))
+    chk_particles = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(20, 220), NSSize(400, 24)))
     chk_particles.setButtonType_(AppKit.NSButtonTypeSwitch)
-    chk_particles.setTitle_("Enable Particles & Magic Sparks")
+    chk_particles.setTitle_("Enable Particle Sparks & Magic Dust")
+    chk_particles.setFont_(AppKit.NSFont.systemFontOfSize_(12.5))
     chk_particles.setState_(1 if cfg.get("particles_enabled", True) else 0)
     v2.addSubview_(chk_particles)
 
-    chk_shake = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(20, 160), NSSize(360, 24)))
+    chk_shake = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(20, 170), NSSize(400, 24)))
     chk_shake.setButtonType_(AppKit.NSButtonTypeSwitch)
-    chk_shake.setTitle_("Enable Screen Shake on Impact")
+    chk_shake.setTitle_("Enable Screen Shake on Powerful Impacts")
+    chk_shake.setFont_(AppKit.NSFont.systemFontOfSize_(12.5))
     chk_shake.setState_(1 if cfg.get("screen_shake_enabled", True) else 0)
     v2.addSubview_(chk_shake)
 
-    chk_power = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(20, 110), NSSize(360, 24)))
+    chk_power = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(20, 120), NSSize(400, 24)))
     chk_power.setButtonType_(AppKit.NSButtonTypeSwitch)
-    chk_power.setTitle_("Low Power Mode (30 FPS Energy Saving)")
+    chk_power.setTitle_("Low Power Mode (Cap at 30 FPS for Battery Saving)")
+    chk_power.setFont_(AppKit.NSFont.systemFontOfSize_(12.5))
     chk_power.setState_(1 if cfg.get("low_power_mode", False) else 0)
     v2.addSubview_(chk_power)
 
     tab2.setView_(v2)
     tabs.addTabViewItem_(tab2)
 
-    content.addSubview_(tabs)
+    backdrop.addSubview_(tabs)
 
-    # Action context
     target._ctx = {
         "engine": engine,
         "skin_popup": skin_popup,
@@ -586,39 +645,38 @@ def show_macos_settings_dialog(engine: Any, parent=None) -> None:
     }
 
     # Bottom Buttons
-    btn_cancel = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(win_w - 220, 16), NSSize(90, 32)))
+    btn_cancel = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(win_w - 230, 16), NSSize(96, 32)))
     btn_cancel.setTitle_("Cancel")
     btn_cancel.setBezelStyle_(AppKit.NSBezelStyleRounded)
+    btn_cancel.setKeyEquivalent_("\x1b")
     btn_cancel.setTarget_(target)
     btn_cancel.setAction_("onCancel:")
-    content.addSubview_(btn_cancel)
+    backdrop.addSubview_(btn_cancel)
 
-    btn_save = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(win_w - 120, 16), NSSize(104, 32)))
+    btn_save = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(win_w - 124, 16), NSSize(108, 32)))
     btn_save.setTitle_("Save & Apply")
     btn_save.setBezelStyle_(AppKit.NSBezelStyleRounded)
     btn_save.setKeyEquivalent_("\r")
     btn_save.setTarget_(target)
     btn_save.setAction_("onSave:")
-    content.addSubview_(btn_save)
+    backdrop.addSubview_(btn_save)
 
     win.makeKeyAndOrderFront_(None)
+    win.orderFrontRegardless()
 
 
 # ============================================================================
-# Productivity Dashboard
+# Classic Apple Productivity Dashboard
 # ============================================================================
 
 def show_macos_stats_dialog(engine: Any, parent=None) -> None:
-    """Show native macOS Pomodoro and Focus productivity statistics dashboard."""
+    """Show classic Apple HUD dashboard for Pomodoro productivity stats."""
+    AppKit.NSApplication.sharedApplication().activateIgnoringOtherApps_(True)
+
     stats = PomodoroStats()
     summary = stats.get_summary()
 
-    today_mins = stats.sessions_today * 25.0
-    h = int(today_mins // 60)
-    m = int(today_mins % 60)
-    today_str = f"{h}h {m}m" if h > 0 else f"{m}m"
-
-    win_w, win_h = 440, 340
+    win_w, win_h = 440, 360
     style = (
         AppKit.NSWindowStyleMaskTitled |
         AppKit.NSWindowStyleMaskClosable
@@ -627,50 +685,75 @@ def show_macos_stats_dialog(engine: Any, parent=None) -> None:
     win = AppKit.NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
         frame, style, AppKit.NSBackingStoreBuffered, False
     )
-    win.setTitle_("Buddy 2.0 — Productivity Dashboard")
+    win.setTitle_("Productivity Statistics")
     win.center()
     _active_dialogs.append(win)
 
     content = win.contentView()
+
+    backdrop = AppKit.NSVisualEffectView.alloc().initWithFrame_(content.bounds())
+    backdrop.setMaterial_(AppKit.NSVisualEffectMaterialUnderWindowBackground)
+    backdrop.setBlendingMode_(AppKit.NSVisualEffectBlendingModeBehindWindow)
+    backdrop.setState_(AppKit.NSVisualEffectStateActive)
+    backdrop.setAutoresizingMask_(AppKit.NSViewWidthSizable | AppKit.NSViewHeightSizable)
+    content.addSubview_(backdrop)
 
     target = StatsDialogTarget.alloc().init()
     target._win = win
     _active_dialogs.append(target)
 
     # Header
-    lbl_hdr = AppKit.NSTextField.labelWithString_("📊 Focus & Productivity Metrics")
-    lbl_hdr.setFrame_(NSRect(NSPoint(24, win_h - 48), NSSize(win_w - 48, 26)))
-    lbl_hdr.setFont_(AppKit.NSFont.boldSystemFontOfSize_(16))
-    content.addSubview_(lbl_hdr)
+    lbl_hdr = AppKit.NSTextField.labelWithString_("Focus Dashboard")
+    lbl_hdr.setFrame_(NSRect(NSPoint(24, win_h - 44), NSSize(300, 26)))
+    lbl_hdr.setFont_(AppKit.NSFont.systemFontOfSize_weight_(19.0, AppKit.NSFontWeightBold))
+    lbl_hdr.setTextColor_(AppKit.NSColor.labelColor())
+    backdrop.addSubview_(lbl_hdr)
 
-    # Stat Cards
-    stat_items = [
-        ("Today's Focused Time:", today_str),
-        ("Completed Sessions Today:", f"{stats.sessions_today} cycles (25m each)"),
-        ("Sessions Completed This Week:", f"{stats.sessions_this_week} cycles"),
-        ("Current Consecutive Streak:", f"{stats.streak_days} days 🔥"),
-        ("Lifetime Focus Logged:", f"{summary.get('total_focus_hours', 0)} hours")
+    lbl_sub = AppKit.NSTextField.labelWithString_("Pomodoro focus intervals and companion productivity metrics.")
+    lbl_sub.setFrame_(NSRect(NSPoint(24, win_h - 66), NSSize(380, 20)))
+    lbl_sub.setFont_(AppKit.NSFont.systemFontOfSize_weight_(12.0, AppKit.NSFontWeightRegular))
+    lbl_sub.setTextColor_(AppKit.NSColor.secondaryLabelColor())
+    backdrop.addSubview_(lbl_sub)
+
+    # Metrics grid: 2x2
+    today_mins = int(stats.sessions_today * 25.0)
+    cards_data = [
+        ("Today's Focus", f"{today_mins} min", 24, win_h - 180),
+        ("Sessions Today", str(stats.sessions_today), 228, win_h - 180),
+        ("Active Streak", f"{stats.streak_days} days 🔥", 24, win_h - 280),
+        ("Lifetime Hours", f"{summary['total_focus_hours']} hrs", 228, win_h - 280),
     ]
 
-    y = win_h - 96
-    for title, val in stat_items:
+    for title, val, cx, cy in cards_data:
+        box = AppKit.NSBox.alloc().initWithFrame_(NSRect(NSPoint(cx, cy), NSSize(188, 88)))
+        box.setTitlePosition_(AppKit.NSNoTitle)
+        box.setBoxType_(AppKit.NSBoxCustom)
+        box.setFillColor_(AppKit.NSColor.controlBackgroundColor())
+        box.setBorderColor_(AppKit.NSColor.separatorColor())
+        box.setBorderWidth_(1.0)
+        box.setCornerRadius_(8.0)
+
         t_lbl = AppKit.NSTextField.labelWithString_(title)
-        t_lbl.setFrame_(NSRect(NSPoint(28, y), NSSize(220, 22)))
-        t_lbl.setFont_(AppKit.NSFont.systemFontOfSize_(13))
-        content.addSubview_(t_lbl)
+        t_lbl.setFrame_(NSRect(NSPoint(14, 56), NSSize(160, 20)))
+        t_lbl.setFont_(AppKit.NSFont.systemFontOfSize_weight_(11.5, AppKit.NSFontWeightMedium))
+        t_lbl.setTextColor_(AppKit.NSColor.secondaryLabelColor())
+        box.addSubview_(t_lbl)
 
         v_lbl = AppKit.NSTextField.labelWithString_(val)
-        v_lbl.setFrame_(NSRect(NSPoint(250, y), NSSize(160, 22)))
-        v_lbl.setFont_(AppKit.NSFont.boldSystemFontOfSize_(13))
-        content.addSubview_(v_lbl)
-        y -= 36
+        v_lbl.setFrame_(NSRect(NSPoint(14, 16), NSSize(160, 36)))
+        v_lbl.setFont_(AppKit.NSFont.systemFontOfSize_weight_(24.0, AppKit.NSFontWeightBold))
+        v_lbl.setTextColor_(AppKit.NSColor.labelColor())
+        box.addSubview_(v_lbl)
 
-    btn_ok = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(win_w - 110, 18), NSSize(90, 32)))
-    btn_ok.setTitle_("Close")
-    btn_ok.setBezelStyle_(AppKit.NSBezelStyleRounded)
-    btn_ok.setKeyEquivalent_("\r")
-    btn_ok.setTarget_(target)
-    btn_ok.setAction_("onClose:")
-    content.addSubview_(btn_ok)
+        backdrop.addSubview_(box)
+
+    btn_done = AppKit.NSButton.alloc().initWithFrame_(NSRect(NSPoint(win_w - 120, 16), NSSize(96, 32)))
+    btn_done.setTitle_("Done")
+    btn_done.setBezelStyle_(AppKit.NSBezelStyleRounded)
+    btn_done.setKeyEquivalent_("\r")
+    btn_done.setTarget_(target)
+    btn_done.setAction_("onClose:")
+    backdrop.addSubview_(btn_done)
 
     win.makeKeyAndOrderFront_(None)
+    win.orderFrontRegardless()

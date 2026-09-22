@@ -125,6 +125,8 @@ buddy --pomodoro reset
 
 ## 📜 Documentation
 
+* [macOS Complete Guide](MACOS.md)
+* [System Architecture & Character Building](ARCHITECTURE.md)
 * [Installation Guide](INSTALL.md)
 * [Custom Skins & Schema](SKINS.md)
 * [Development & Testing](DEVELOPMENT.md)

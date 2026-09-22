@@ -1,6 +1,7 @@
 # 🛠️ Buddy 2.0 Developer Guide & Architecture
 
 This document describes the internal architecture of **Buddy 2.0** and how to contribute, debug, and extend the engine.
+For detailed instructions on creating new characters and understanding the cross-platform rendering pipeline, see [**`ARCHITECTURE.md`**](ARCHITECTURE.md).
 
 ---
 

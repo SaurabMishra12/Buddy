@@ -86,11 +86,19 @@ class TestMacOSPlatform(unittest.TestCase):
         center_pt = AppKit.NSPoint(90, 90)
         self.assertIsNotNone(view.hitTest_(center_pt))
 
-        # 2. Point 40px away from center -> within 54px -> Should hit
-        inside_pt = AppKit.NSPoint(90 + 40, 90)
+        # 2. Point 18px away from center -> within compact 24px body radius -> Should hit
+        inside_pt = AppKit.NSPoint(90 + 18, 90)
         self.assertIsNotNone(view.hitTest_(inside_pt))
 
-        # 3. Corner of window (0, 0) -> distance sqrt(90^2 + 90^2) = 127px > 54px -> Should be click-through (None)
+        # 3. Point 45px away -> outside compact radius -> passes through to desktop (None)
+        outside_pt = AppKit.NSPoint(90 + 45, 90)
+        self.assertIsNone(view.hitTest_(outside_pt))
+
+        # 4. Configure custom mask to 54px -> 40px point now hits
+        overlay.set_hitbox_mask(54.0)
+        self.assertIsNotNone(view.hitTest_(AppKit.NSPoint(90 + 40, 90)))
+
+        # 5. Corner of window (5, 5) -> distance 127px > 54px -> Should be click-through (None)
         corner_pt = AppKit.NSPoint(5, 5)
         self.assertIsNone(view.hitTest_(corner_pt))
 

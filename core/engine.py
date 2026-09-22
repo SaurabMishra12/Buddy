@@ -252,6 +252,8 @@ class BuddyEngine:
         """Adjust character scale."""
         self.character.scale = max(0.5, min(2.5, scale))
         self.config.set("scale", self.character.scale)
+        if hasattr(self.window, "set_scale"):
+            self.window.set_scale(self.character.scale)
         self.window.queue_draw()
 
     def trigger_signature_ability(self) -> None:
@@ -559,6 +561,13 @@ class BuddyEngine:
                 # Closer than 50px -> Character stays calm in IDLE/HOVER; user can touch/click/drag without fleeing!
                 dist_to_cursor = math.hypot(self.cursor_x - self.character.x, self.cursor_y - self.character.y)
                 self.is_chasing = (dist_to_cursor > 50.0)
+
+                # Polite courtesy distancing: If cursor approaches within 38px while user is working,
+                # gently drift companion aside so underlying windows, links, and buttons are never blocked!
+                if 0.5 < dist_to_cursor < 38.0:
+                    push_dir = 1.0 if (self.character.x >= self.cursor_x) else -1.0
+                    self.character.vx += push_dir * 2.2
+                    self.character.x += push_dir * 3.0
 
                 # Handle signature move active window & acrobatics
                 if self.is_spinning:
