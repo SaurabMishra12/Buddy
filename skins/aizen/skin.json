@@ -1,0 +1,15 @@
+{
+  "id": "aizen",
+  "name": "Sōsuke Aizen",
+  "description": "Former 5th Division Captain commanding Kyōka Suigetsu complete hypnosis and Kurohitsugi.",
+  "speed": 1.2,
+  "canFly": false,
+  "abilities": [
+    "kyoka_suigetsu",
+    "kurohitsugi",
+    "shunpo",
+    "adjust_glasses",
+    "calm_smile"
+  ],
+  "category": "bleach"
+}

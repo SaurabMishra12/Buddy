@@ -1,0 +1,15 @@
+{
+  "id": "ulquiorra",
+  "name": "Ulquiorra Cifer",
+  "description": "4th Espada wielding Murciélago bat wings, Cero Oscuras, and Segunda Etapa.",
+  "speed": 1.25,
+  "canFly": true,
+  "abilities": [
+    "cero_oscuras",
+    "resurreccion_murcielago",
+    "lanza_del_relampago",
+    "stoic_glare",
+    "sonido"
+  ],
+  "category": "bleach"
+}

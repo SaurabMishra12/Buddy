@@ -33,7 +33,7 @@ BUILTIN_SKINS: Dict[str, Tuple[str, str]] = {
     "penguin": ("skins.penguin.character", "PenguinCharacter"),
     "fox": ("skins.fox.character", "FoxCharacter"),
     "slime": ("skins.slime.character", "SlimeCharacter"),
-    # Bleach Soul Reapers
+    # Bleach Soul Reapers & Espada
     "ichigo": ("skins.ichigo.character", "IchigoCharacter"),
     "byakuya": ("skins.byakuya.character", "ByakuyaCharacter"),
     "yamamoto": ("skins.yamamoto.character", "YamamotoCharacter"),
@@ -41,73 +41,50 @@ BUILTIN_SKINS: Dict[str, Tuple[str, str]] = {
     "hitsugaya": ("skins.hitsugaya.character", "HitsugayaCharacter"),
     "rukia": ("skins.rukia.character", "RukiaCharacter"),
     "urahara": ("skins.urahara.character", "UraharaCharacter"),
+    "aizen": ("skins.aizen.character", "AizenCharacter"),
+    "yoruichi": ("skins.yoruichi.character", "YoruichiCharacter"),
+    "shunsui": ("skins.shunsui.character", "ShunsuiCharacter"),
+    "soi_fon": ("skins.soi_fon.character", "SoiFonCharacter"),
+    "shinji": ("skins.shinji.character", "ShinjiCharacter"),
+    "mayuri": ("skins.mayuri.character", "MayuriCharacter"),
+    "ulquiorra": ("skins.ulquiorra.character", "UlquiorraCharacter"),
 }
 
 
-def _get_builtin_classes() -> Dict[str, Type[BaseCharacter]]:
-    """Statically import and map all 29 character classes for reliable execution and PyInstaller bundling."""
-    from skins.thor.character import ThorCharacter
-    from skins.dragon.character import DragonCharacter
-    from skins.cat.character import CatCharacter
-    from skins.dog.character import DogCharacter
-    from skins.hulk.character import HulkCharacter
-    from skins.ironman.character import IronManCharacter
-    from skins.harry_potter.character import HarryPotterCharacter
-    from skins.captain_america.character import CaptainAmericaCharacter
-    from skins.thanos.character import ThanosCharacter
-    from skins.batman.character import BatmanCharacter
-    from skins.superman.character import SupermanCharacter
-    from skins.spiderman.character import SpiderManCharacter
-    from skins.pixel_wizard.character import PixelWizardCharacter
-    from skins.space_robot.character import SpaceRobotCharacter
-    from skins.ninja.character import NinjaCharacter
-    from skins.vampire.character import VampireCharacter
-    from skins.fairy.character import FairyCharacter
-    from skins.alien.character import AlienCharacter
-    from skins.ghost.character import GhostCharacter
-    from skins.penguin.character import PenguinCharacter
-    from skins.fox.character import FoxCharacter
-    from skins.slime.character import SlimeCharacter
-    # Bleach Soul Reapers
+ACTIVE_ROSTER = [
+    "ichigo",
+    "byakuya",
+    "yamamoto",
+    "hitsugaya",
+    "rukia",
+    "aizen",
+    "ulquiorra",
+]
+
+# Backwards compatibility alias
+ACTIVE_BLEACH_ROSTER = ACTIVE_ROSTER
+
+ARCHIVED_ROSTER = [k for k in BUILTIN_SKINS.keys() if k not in ACTIVE_ROSTER]
+
+
+def _get_active_classes() -> Dict[str, Type[BaseCharacter]]:
+    """Only pre-import the 7 active Bleach characters at startup for instant boot and minimum RAM."""
     from skins.ichigo.character import IchigoCharacter
     from skins.byakuya.character import ByakuyaCharacter
     from skins.yamamoto.character import YamamotoCharacter
-    from skins.kenpachi.character import KenpachiCharacter
     from skins.hitsugaya.character import HitsugayaCharacter
     from skins.rukia.character import RukiaCharacter
-    from skins.urahara.character import UraharaCharacter
+    from skins.aizen.character import AizenCharacter
+    from skins.ulquiorra.character import UlquiorraCharacter
 
     return {
-        "thor": ThorCharacter,
-        "dragon": DragonCharacter,
-        "cat": CatCharacter,
-        "dog": DogCharacter,
-        "hulk": HulkCharacter,
-        "ironman": IronManCharacter,
-        "harry_potter": HarryPotterCharacter,
-        "captain_america": CaptainAmericaCharacter,
-        "thanos": ThanosCharacter,
-        "batman": BatmanCharacter,
-        "superman": SupermanCharacter,
-        "spiderman": SpiderManCharacter,
-        "pixel_wizard": PixelWizardCharacter,
-        "space_robot": SpaceRobotCharacter,
-        "ninja": NinjaCharacter,
-        "vampire": VampireCharacter,
-        "fairy": FairyCharacter,
-        "alien": AlienCharacter,
-        "ghost": GhostCharacter,
-        "penguin": PenguinCharacter,
-        "fox": FoxCharacter,
-        "slime": SlimeCharacter,
-        # Bleach Soul Reapers
         "ichigo": IchigoCharacter,
         "byakuya": ByakuyaCharacter,
         "yamamoto": YamamotoCharacter,
-        "kenpachi": KenpachiCharacter,
         "hitsugaya": HitsugayaCharacter,
         "rukia": RukiaCharacter,
-        "urahara": UraharaCharacter,
+        "aizen": AizenCharacter,
+        "ulquiorra": UlquiorraCharacter,
     }
 
 
@@ -115,7 +92,8 @@ class SkinManager:
     """Discovers, validates, and registers modular character skins."""
 
     def __init__(self):
-        self._registry: Dict[str, Type[BaseCharacter]] = _get_builtin_classes()
+        # Startup optimization: pre-load only the 7 active Bleach characters
+        self._registry: Dict[str, Type[BaseCharacter]] = _get_active_classes()
         self._metadata_cache: Dict[str, Dict[str, Any]] = {}
         self._populate_metadata()
 
@@ -150,7 +128,7 @@ class SkinManager:
             ("penguin", "Penguin", "Adorable arctic penguin belly-sliding across the screen and waddling cheerfully.", ["belly_slide", "peck_dance", "snow_hop"]),
             ("fox", "Fox", "Clever woodland red fox with a bushy tail, rapid sprints, and playful pounces.", ["dash_sprint", "pounce_jump", "tail_flick"]),
             ("slime", "Bouncy Slime", "Cheerful jelly creature that bounces with squash-and-stretch physics and splits droplets.", ["super_bounce", "jelly_split", "wobble"]),
-            # Bleach Soul Reapers
+            # Bleach Soul Reapers & Espada
             ("ichigo", "Ichigo Kurosaki", "Substitute Soul Reaper wielding Zangetsu with Getsuga Tenshō and Tensa Zangetsu Bankai.", ["getsuga_tensho", "bankai", "shunpo"]),
             ("byakuya", "Byakuya Kuchiki", "Captain of the 6th Division wielding Senbonzakura, Senkei, and Shūkei Hakuteiken.", ["senbonzakura", "senkei", "hakuteiken"]),
             ("yamamoto", "Genryūsai Yamamoto", "Captain-Commander of the Gotei 13 wielding Ryūjin Jakka and Zanka no Tachi.", ["ryujin_jakka", "zanka_no_tachi", "flame_wave"]),
@@ -158,6 +136,13 @@ class SkinManager:
             ("hitsugaya", "Tōshirō Hitsugaya", "Captain of the 10th Division wielding the ice dragon Hyōrinmaru and Daiguren Bankai wings.", ["hyorinmaru", "daiguren_bankai", "soten_hyoso", "ice_wings", "flight"]),
             ("rukia", "Rukia Kuchiki", "Soul Reaper wielding the pure white snow blade Sode no Shirayuki and Hakka no Togame.", ["sode_no_shirayuki", "tsukishiro", "hakka_no_togame"]),
             ("urahara", "Kisuke Urahara", "Former 12th Division Captain wielding Benihime, paper fan, and Kannonbiraki Bankai.", ["benihime", "kannonbiraki_bankai"]),
+            ("aizen", "Sōsuke Aizen", "Former 5th Division Captain commanding Kyōka Suigetsu complete hypnosis and Kurohitsugi.", ["kyoka_suigetsu", "kurohitsugi", "shunpo"]),
+            ("yoruichi", "Yoruichi Shihōin", "Flash Goddess and former Onmitsukidō Commander wielding lightning Shunkō and feline agility.", ["shunko", "lightning_dash", "shunpo"]),
+            ("shunsui", "Shunsui Kyōraku", "Captain of the 8th Division wielding dual blades Katen Kyōkotsu, shadow games, and Karamatsu Shinjū.", ["kageoni", "karamatsu_shinju", "irooni"]),
+            ("soi_fon", "Soi Fon", "Commander of the Onmitsukidō wielding Suzumebachi stinger and Jakuhō Raikōben Bankai artillery.", ["suzumebachi", "jakuho_raikoben", "nigeki_kessatsu"]),
+            ("shinji", "Shinji Hirako", "5th Division Captain and Visored leader wielding Sakanade inverted perception and Sakashima Yokoshima Bankai.", ["sakanade", "hollow_mask", "inverted_world"]),
+            ("mayuri", "Mayuri Kurotsuchi", "President of the Shinigami Research Institute wielding Ashisogi Jizō and Konjiki Ashisogi Jizō Bankai.", ["ashisogi_jizo", "konjiki_bankai", "poison_mist"]),
+            ("ulquiorra", "Ulquiorra Cifer", "4th Espada wielding Murciélago bat wings, Cero Oscuras, and Segunda Etapa.", ["cero_oscuras", "resurreccion_murcielago", "lanza_del_relampago", "flight"]),
         ]
 
         for skin_id, name, desc, abilities in skin_defs:
@@ -169,7 +154,7 @@ class SkinManager:
                 "speed": 1.0,
                 "canFly": "flight" in abilities or "glide" in abilities or "web_swing" in abilities or "levitate" in abilities or "flutter" in abilities or "tractor_beam" in abilities or "phase_shift" in abilities or "ice_wings" in abilities,
                 "abilities": abilities,
-                "category": "bleach" if skin_id in ["ichigo", "byakuya", "yamamoto", "kenpachi", "hitsugaya", "rukia", "urahara"] else ("superhero" if skin_id in ["thor", "hulk", "ironman", "captain_america", "batman", "superman", "thanos", "spiderman"] else ("animals" if skin_id in ["cat", "dog", "penguin", "fox"] else ("fantasy" if skin_id in ["dragon", "pixel_wizard", "fairy", "vampire", "ghost"] else ("sci-fi" if skin_id in ["space_robot", "alien"] else "cute"))))
+                "category": "bleach" if skin_id in ["ichigo", "byakuya", "yamamoto", "kenpachi", "hitsugaya", "rukia", "urahara", "aizen", "yoruichi", "shunsui", "soi_fon", "shinji", "mayuri", "ulquiorra"] else ("superhero" if skin_id in ["thor", "hulk", "ironman", "captain_america", "batman", "superman", "thanos", "spiderman"] else ("animals" if skin_id in ["cat", "dog", "penguin", "fox"] else ("fantasy" if skin_id in ["dragon", "pixel_wizard", "fairy", "vampire", "ghost"] else ("sci-fi" if skin_id in ["space_robot", "alien"] else "cute"))))
             }
             if meta_path.exists():
                 try:
@@ -196,7 +181,7 @@ class SkinManager:
     def normalize_skin_id(skin_id: str) -> str:
         """Normalize skin name to canonical lowercase ID."""
         if not skin_id:
-            return "thor"
+            return "ichigo"
         raw = str(skin_id).lower().strip().replace("-", "_").replace(" ", "_")
         aliases = {
             "iron_man": "ironman",
@@ -217,10 +202,26 @@ class SkinManager:
         }
         return aliases.get(raw, raw)
 
+    def is_archived(self, skin_id: str) -> bool:
+        """Return True if character is archived (not in active 7 Bleach roster)."""
+        norm_id = self.normalize_skin_id(skin_id)
+        return norm_id in ARCHIVED_ROSTER
 
-    def get_available_skins(self) -> List[Dict[str, Any]]:
-        """Return list of all registered skins metadata."""
-        return list(self._metadata_cache.values())
+    def list_skins(self, include_archived: bool = True) -> List[str]:
+        """Return list of skin IDs. Includes all 36 for schema/tests if include_archived is True."""
+        if include_archived:
+            return list(BUILTIN_SKINS.keys())
+        return list(ACTIVE_ROSTER)
+
+    def get_active_skins(self) -> List[Dict[str, Any]]:
+        """Return metadata strictly for the 7 active Bleach characters."""
+        return [self._metadata_cache[sid] for sid in ACTIVE_ROSTER if sid in self._metadata_cache]
+
+    def get_available_skins(self, include_archived: bool = True) -> List[Dict[str, Any]]:
+        """Return list of skins metadata. Returns all 36 if include_archived=True (default), or active 7 if False."""
+        if include_archived:
+            return list(self._metadata_cache.values())
+        return self.get_active_skins()
 
     def get_metadata(self, skin_id: str) -> Optional[Dict[str, Any]]:
         """Return metadata for specific skin ID with case-insensitive normalization."""
@@ -228,12 +229,32 @@ class SkinManager:
         return self._metadata_cache.get(norm_id)
 
     def create_character(self, skin_id: str, x: float = 500.0, y: float = 400.0) -> BaseCharacter:
-        """Instantiate character for specified skin ID with fallback to Thor if missing."""
+        """Instantiate character for specified skin ID with lazy loading for archived characters and fallback to Ichigo."""
+        import importlib
         norm_id = self.normalize_skin_id(skin_id)
-        cls = self._registry.get(norm_id) or self._registry.get("thor")
+
+        # 1. Fast path: already loaded active character or previously requested archived character
+        cls = self._registry.get(norm_id)
+
+        # 2. Lazy loading: if skin is archived but registered in BUILTIN_SKINS, import on demand
+        if not cls and norm_id in BUILTIN_SKINS:
+            mod_path, cls_name = BUILTIN_SKINS[norm_id]
+            try:
+                mod = importlib.import_module(mod_path)
+                cls = getattr(mod, cls_name, None)
+                if cls:
+                    self._registry[norm_id] = cls
+            except Exception as e:
+                print(f"[SkinManager] Warning: failed lazy-loading archived skin '{norm_id}': {e}")
+
+        # 3. Fallback to active Bleach protagonist Ichigo
         if not cls:
-            from skins.thor.character import ThorCharacter
-            return ThorCharacter(x, y)
+            cls = self._registry.get("ichigo")
+            if not cls:
+                from skins.ichigo.character import IchigoCharacter
+                cls = IchigoCharacter
+                self._registry["ichigo"] = cls
+
         return cls(x, y)
 
 

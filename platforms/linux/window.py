@@ -652,6 +652,10 @@ class OverlayWindow:
     def trigger_sky_strike(self, target_x: float, target_y: float) -> None:
         SkyStrikeWindow(target_x, target_y)
 
+    def trigger_world_vfx(self, *args, **kwargs) -> None:
+        """World VFX stub for Linux parity."""
+        pass
+
     def queue_draw(self) -> None:
         self.window.queue_draw()
 

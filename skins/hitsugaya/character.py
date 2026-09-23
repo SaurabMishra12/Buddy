@@ -22,6 +22,8 @@ class HitsugayaCharacter(BaseCharacter):
         self.substate = "SERIOUS"
         self.substate_timer = time.time() + random.uniform(5.0, 10.0)
         self.ability_end_time = 0.0
+        self.bankai_start_time = 0.0
+        self.bankai_duration = 24.0
 
         # Annoyed twitch animation
         self.twitch_timer = 0.0
@@ -35,7 +37,7 @@ class HitsugayaCharacter(BaseCharacter):
         audio_mgr: Any
     ) -> bool:
         now = time.time()
-        if ability_name in ("hyorinmaru", "special"):
+        if ability_name in ("hyorinmaru", "shikai", "power_up", "special"):
             self.substate = "HYORINMARU"
             self.ability_end_time = now + 2.5
             particle_mgr.burst_ice_crystals(self.x, self.y, count=28)
@@ -44,10 +46,12 @@ class HitsugayaCharacter(BaseCharacter):
                 audio_mgr.play("magic")
             return True
 
-        elif ability_name in ("daiguren_bankai", "ice_wings"):
+        elif ability_name in ("daiguren_bankai", "ice_wings", "bankai", "ultimate"):
             self.is_bankai = not self.is_bankai
             self.substate = "DAIGUREN" if self.is_bankai else "SERIOUS"
-            self.ability_end_time = now + 5.0 if self.is_bankai else 0.0
+            self.bankai_start_time = now if self.is_bankai else 0.0
+            self.bankai_duration = 24.0
+            self.ability_end_time = now + self.bankai_duration if self.is_bankai else 0.0
             particle_mgr.burst_ice_crystals(self.x, self.y, count=36, size=8.0)
             particle_mgr.shockwave(self.x, self.y, max_radius=120.0, color=(0.7, 0.95, 1.0), line_width=4.0)
             if audio_mgr:
@@ -140,19 +144,55 @@ class HitsugayaCharacter(BaseCharacter):
         ctx.save()
         wing_flutter = math.sin(self.anim_time * 3.5) * 0.12
 
-        # 3 Purple-Cyan Ice Flower Stars floating overhead
-        flower_pulse = math.sin(self.anim_time * 3.0) * 1.0
-        for fx, fy in [(-12, -32), (0, -36), (12, -32)]:
+        # 3 Diamond-Petal Ice Flower Icons floating overhead
+        # Visibly lose petals/flowers per ~1/3 of Bankai duration to telegraph time remaining
+        now = time.time()
+        elapsed = now - getattr(self, "bankai_start_time", 0.0)
+        duration = getattr(self, "bankai_duration", 24.0)
+        rem_frac = max(0.0, min(1.0, 1.0 - (elapsed / max(0.1, duration))))
+
+        flower_pulse = math.sin(self.anim_time * 3.0) * 1.2
+        flower_positions = [(-14, -34), (0, -39), (14, -34)]
+
+        # Each 1/3 of duration governs one flower (right f_idx=2, left f_idx=0, center f_idx=1)
+        for f_idx, (fx, fy) in enumerate(flower_positions):
+            f_tier = 1 if f_idx == 1 else (0 if f_idx == 0 else 2)
+            tier_thresh = f_tier * 0.333
+            if rem_frac <= tier_thresh:
+                continue
+
+            flower_life = min(1.0, (rem_frac - tier_thresh) / 0.333)
+            num_petals = max(1, math.ceil(flower_life * 4))
+
             ctx.save()
             ctx.translate(fx, fy + flower_pulse)
-            ctx.set_source_rgba(0.7, 0.4, 0.95, 0.85)
-            ctx.new_path()
-            ctx.move_to(0, -3)
-            ctx.line_to(3, 0)
-            ctx.line_to(0, 3)
-            ctx.line_to(-3, 0)
-            ctx.close_path()
+            ctx.set_source_rgba(0.95, 0.98, 1.0, 0.95)
+            ctx.arc(0, 0, 1.2, 0, math.pi * 2)
             ctx.fill()
+
+            petal_angles = [0.0, math.pi * 0.5, math.pi, math.pi * 1.5]
+            for p_i in range(num_petals):
+                p_ang = petal_angles[p_i]
+                ctx.save()
+                ctx.rotate(p_ang)
+                ctx.set_source_rgba(0.45, 0.85, 1.0, 0.85)
+                ctx.new_path()
+                ctx.move_to(0, -1.0)
+                ctx.line_to(2.2, -4.0)
+                ctx.line_to(0, -6.5)
+                ctx.line_to(-2.2, -4.0)
+                ctx.close_path()
+                ctx.fill()
+                ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95)
+                ctx.new_path()
+                ctx.move_to(0, -1.8)
+                ctx.line_to(1.1, -3.8)
+                ctx.line_to(0, -5.2)
+                ctx.line_to(-1.1, -3.8)
+                ctx.close_path()
+                ctx.fill()
+                ctx.restore()
+
             ctx.restore()
 
         # Left Crystalline Wing

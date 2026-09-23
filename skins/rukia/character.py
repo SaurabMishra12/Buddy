@@ -35,30 +35,33 @@ class RukiaCharacter(BaseCharacter):
         audio_mgr: Any
     ) -> bool:
         now = time.time()
-        if ability_name in ("sode_no_shirayuki", "special"):
-            self.substate = "TSUKISHIRO"
-            self.ability_end_time = now + 2.5
-            particle_mgr.burst_ice_crystals(self.x, self.y, count=26)
-            particle_mgr.shockwave(self.x, self.y, max_radius=85.0, color=(0.85, 0.95, 1.0))
-            if audio_mgr:
-                audio_mgr.play("magic")
-            return True
-
-        elif ability_name == "tsukishiro":
+        if ability_name in ("first_dance_tsukishiro", "tsukishiro", "signature", "shikai"):
+            # First Dance, Tsukishiro: circular frost ring expanding outward from the ground up
             self.substate = "TSUKISHIRO"
             self.ability_end_time = now + 3.0
-            particle_mgr.shockwave(target_x, target_y, max_radius=70.0, color=(1.0, 1.0, 1.0), line_width=3.5)
-            particle_mgr.burst_ice_crystals(target_x, target_y, count=28, size=8.0)
+            particle_mgr.burst_ice_crystals(self.x, self.y, count=28, size=8.0)
+            particle_mgr.shockwave(target_x, target_y, max_radius=85.0, color=(1.0, 1.0, 1.0), line_width=3.5)
             if audio_mgr:
                 audio_mgr.play("magic")
             return True
 
-        elif ability_name == "hakka_no_togame":
+        elif ability_name in ("next_dance_hakuren", "hakuren", "power_up", "special", "sode_no_shirayuki"):
+            # Next Dance, Hakuren: directional wave-front of ice fired forward
+            self.substate = "HAKUREN"
+            self.ability_end_time = now + 3.0
+            particle_mgr.burst_ice_crystals(target_x, target_y, count=32, size=9.0)
+            particle_mgr.shockwave(target_x, target_y, max_radius=100.0, color=(0.85, 0.95, 1.0))
+            if audio_mgr:
+                audio_mgr.play("magic")
+            return True
+
+        elif ability_name in ("hakka_no_togame", "bankai", "ultimate"):
+            # Ultimate: Hakka no Togame — absolute zero
             self.is_bankai = not self.is_bankai
             self.substate = "HAKKA_NO_TOGAME" if self.is_bankai else "CALM"
             self.ability_end_time = now + 5.0 if self.is_bankai else 0.0
-            particle_mgr.shockwave(self.x, self.y, max_radius=125.0, color=(0.95, 0.98, 1.0), line_width=4.5)
-            particle_mgr.burst_ice_crystals(self.x, self.y, count=36, size=9.0)
+            particle_mgr.shockwave(self.x, self.y, max_radius=145.0, color=(0.95, 0.98, 1.0), line_width=4.5)
+            particle_mgr.burst_ice_crystals(self.x, self.y, count=40, size=10.0)
             if audio_mgr:
                 audio_mgr.play("magic")
             return True

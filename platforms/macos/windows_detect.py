@@ -68,8 +68,9 @@ def scan_macos_desktop_windows(screen_bounds: Tuple[int, int, int, int]) -> List
     except Exception as e:
         pass
 
-    if not discovered:
-        # Fallback ledge in center of workspace
+    has_window = any(l.ledge_type == "window" for l in discovered)
+    if not has_window:
+        # Fallback window & button ledges if no external application windows are open or accessible
         w1_x = min_x + screen_w * 0.15
         w1_y = min_y + screen_h * 0.20
         w1_w = screen_w * 0.70
@@ -80,6 +81,14 @@ def scan_macos_desktop_windows(screen_bounds: Tuple[int, int, int, int]) -> List
             height=28.0,
             ledge_type="window",
             title="Desktop Window"
+        ))
+        discovered.append(DesktopLedge(
+            x=w1_x + 10.0,
+            y=w1_y + 4.0,
+            width=56.0,
+            height=16.0,
+            ledge_type="button",
+            title="Window Controls"
         ))
 
     return discovered

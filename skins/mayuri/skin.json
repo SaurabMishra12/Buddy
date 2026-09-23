@@ -1,0 +1,15 @@
+{
+  "id": "mayuri",
+  "name": "Mayuri Kurotsuchi",
+  "description": "President of the Shinigami Research Institute wielding Ashisogi Jizō and Konjiki Ashisogi Jizō Bankai.",
+  "speed": 1.1,
+  "canFly": false,
+  "abilities": [
+    "ashisogi_jizo",
+    "konjiki_bankai",
+    "mad_cackle",
+    "examine_syringe",
+    "poison_mist"
+  ],
+  "category": "bleach"
+}

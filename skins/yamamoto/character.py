@@ -42,12 +42,13 @@ class YamamotoCharacter(BaseCharacter):
                 audio_mgr.play("fire")
             return True
 
-        elif ability_name == "zanka_no_tachi":
+        elif ability_name in ("zanka_no_tachi", "kyokujitsujin", "bankai", "ultimate", "zanka_no_tachi_east"):
             self.is_bankai = not self.is_bankai
             self.substate = "BANKAI" if self.is_bankai else "AUTHORITY"
             self.ability_end_time = now + 4.0 if self.is_bankai else 0.0
             particle_mgr.shockwave(self.x, self.y, max_radius=140.0, color=(0.2, 0.05, 0.05), line_width=4.0)
             particle_mgr.burst_reiatsu(self.x, self.y, color=(0.85, 0.1, 0.05), count=26)
+            particle_mgr.burst_sparks(target_x, target_y, count=18, color=(1.0, 1.0, 1.0))
             if audio_mgr:
                 audio_mgr.play("fire")
             return True
@@ -275,7 +276,7 @@ class YamamotoCharacter(BaseCharacter):
             ctx.fill()
 
         elif self.substate == "BANKAI":
-            # Zanka no Tachi: Pitch black charred blade, subtle heat smoke
+            # Zanka no Tachi, East (Kyokujitsujin): charred black blade with concentrated white-hot edge
             ctx.set_source_rgb(0.96, 0.96, 0.98)
             ctx.rectangle(8, -8, 14, 6)
             ctx.fill()
@@ -286,13 +287,18 @@ class YamamotoCharacter(BaseCharacter):
             ctx.translate(22, -5)
             ctx.rotate(-0.25)
             # Charred black blade
-            ctx.set_source_rgb(0.06, 0.06, 0.08)
+            ctx.set_source_rgb(0.04, 0.04, 0.05)
             ctx.rectangle(0, -2, 36, 3.5)
             ctx.fill()
-            # Glowing scorched edge
-            ctx.set_source_rgba(0.95, 0.15, 0.05, 0.8)
-            ctx.set_line_width(1.0)
+            # Concentrated white-hot incineration edge (East)
+            ctx.set_source_rgba(1.0, 0.4, 0.1, 0.8)
+            ctx.set_line_width(1.8)
             ctx.move_to(0, 1.5)
+            ctx.line_to(36, 1.5)
+            ctx.stroke()
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95)
+            ctx.set_line_width(0.9)
+            ctx.move_to(8, 1.5)
             ctx.line_to(36, 1.5)
             ctx.stroke()
 

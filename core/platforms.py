@@ -56,16 +56,38 @@ class PlatformManager:
         self.ledges: List[DesktopLedge] = []
         self.dynamic_ledges: List[DesktopLedge] = []
         self.last_scan_time = 0.0
-        self.scan_interval = 4.0  # seconds between full desktop window queries
+        self.scan_interval = 12.0  # seconds between full desktop window queries
         self._atspi_available = True
+        self._scanning = False
 
-    def scan_desktop_windows(self, screen_bounds: Tuple[int, int, int, int]) -> None:
+    def scan_desktop_windows(self, screen_bounds: Tuple[int, int, int, int], sync: bool = False) -> None:
         """Scan desktop for open application windows, top panels, and buttons."""
         from platforms import is_macos
         if is_macos():
-            from platforms.macos.windows_detect import scan_macos_desktop_windows
-            self.ledges = scan_macos_desktop_windows(screen_bounds)
-            self.last_scan_time = time.time()
+            if sync or not self.ledges:
+                from platforms.macos.windows_detect import scan_macos_desktop_windows
+                self.ledges = scan_macos_desktop_windows(screen_bounds)
+                self.last_scan_time = time.time()
+                return
+
+            if self._scanning:
+                return
+
+            self._scanning = True
+            def _async_scan():
+                try:
+                    from platforms.macos.windows_detect import scan_macos_desktop_windows
+                    results = scan_macos_desktop_windows(screen_bounds)
+                    if results:
+                        self.ledges = results
+                except Exception:
+                    pass
+                finally:
+                    self._scanning = False
+                    self.last_scan_time = time.time()
+
+            import threading
+            threading.Thread(target=_async_scan, daemon=True).start()
             return
 
         min_x, min_y, screen_w, screen_h = screen_bounds

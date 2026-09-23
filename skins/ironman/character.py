@@ -33,6 +33,10 @@ class IronManCharacter(BaseCharacter):
         particle_mgr: ParticleManager,
         audio_mgr: Any
     ) -> bool:
+        if not audio_mgr:
+            from core.audio import audio_manager
+            audio_mgr = audio_manager
+
         dir_mult = 1.0 if self.facing_right else -1.0
         palm_x = self.x + dir_mult * 24.0
         palm_y = self.y - 6.0

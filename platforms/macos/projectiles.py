@@ -134,9 +134,9 @@ class MacOSDesktopProjectileWindow:
             AppKit.NSWindowCollectionBehaviorFullScreenAuxiliary
         )
 
-        # High-DPI backing scale
-        primary_screens = AppKit.NSScreen.screens()
-        primary = primary_screens[0] if primary_screens else None
+        # High-DPI backing scale — use main (focused) screen
+        from platforms.macos.coordinate import get_main_screen
+        primary = get_main_screen()
         self.backing_scale = float(primary.backingScaleFactor()) if primary else 2.0
         self.pixel_w = int(self.win_size * self.backing_scale)
         self.pixel_h = int(self.win_size * self.backing_scale)

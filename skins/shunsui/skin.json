@@ -1,0 +1,15 @@
+{
+  "id": "shunsui",
+  "name": "Shunsui Kyōraku",
+  "description": "Captain of the 8th Division wielding dual blades Katen Kyōkotsu, shadow games, and Karamatsu Shinjū.",
+  "speed": 1.15,
+  "canFly": false,
+  "abilities": [
+    "kageoni",
+    "karamatsu_shinju",
+    "sip_sake",
+    "tilt_hat",
+    "irooni"
+  ],
+  "category": "bleach"
+}

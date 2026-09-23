@@ -58,7 +58,11 @@ def _handle_ipc_message(engine, msg: dict):
     elif action == "switch_skin":
         skin_id = msg.get("skin_id")
         if skin_id:
-            engine.switch_skin(skin_id)
+            dev_mode = engine.is_developer_mode() if hasattr(engine, "is_developer_mode") else engine.config.get("developer_mode", False)
+            if skin_manager.is_archived(skin_id) and not dev_mode:
+                print(f"[Buddy IPC] Switch to '{skin_id}' rejected: character is archived and Developer Mode is OFF.")
+            else:
+                engine.switch_skin(skin_id)
     elif action == "set_mode":
         mode = msg.get("mode")
         if mode:
@@ -66,9 +70,13 @@ def _handle_ipc_message(engine, msg: dict):
     elif action == "settings":
         from ui.settings_dialog import show_settings_dialog
         show_settings_dialog(engine)
-    elif action in ("skins", "skin_gallery"):
-        from ui.skin_selector import show_skin_selector
-        show_skin_selector(engine)
+    elif action in ("control_center", "skins", "skin_gallery"):
+        from platforms import is_macos
+        if is_macos() and hasattr(engine, "open_control_center"):
+            engine.open_control_center()
+        else:
+            from ui.skin_selector import show_skin_selector
+            show_skin_selector(engine)
     elif action == "stats":
         from ui.stats_dialog import show_stats_dialog
         show_stats_dialog(engine)
@@ -162,11 +170,17 @@ def main():
     parser.add_argument("--list-skins", action="store_true", help="List all 20+ available skins to terminal")
     parser.add_argument("--pomodoro", nargs="?", const="start", choices=["start", "pause", "resume", "reset", "skip", "status"], help="Pomodoro productivity controls (start, pause, resume, reset, skip, status)")
     parser.add_argument("--stats", action="store_true", help="Show productivity and focus session statistics")
+    parser.add_argument("--control-center", action="store_true", help="Open Buddy Control Center interface")
     parser.add_argument("--debug", action="store_true", help="Launch with developer diagnostics overlay HUD")
+    parser.add_argument("--dev", "--developer", action="store_true", help="Enable Developer Mode (access all 29 archived companions & telemetry)")
     parser.add_argument("--version", action="store_true", help="Show Buddy version")
     parser.add_argument("--quit", action="store_true", help="Quit running Buddy instance")
 
     args = parser.parse_args()
+
+    dev_mode = bool(args.debug or getattr(args, "dev", False) or config.get("developer_mode", False))
+    if getattr(args, "dev", False):
+        config.set("developer_mode", True)
 
     if args.version:
         from platforms import is_macos
@@ -176,10 +190,15 @@ def main():
 
     if args.list_skins:
         print("⚡ Available Buddy 2.0 Characters:")
-        for s in skin_manager.get_available_skins():
+        from skins.manager import ARCHIVED_ROSTER
+        skins_to_show = skin_manager.get_available_skins(include_archived=True) if dev_mode else skin_manager.get_active_skins()
+        for s in skins_to_show:
             flight = " [Can Fly]" if s.get("canFly") else ""
             cat = f"({s.get('category', 'general').capitalize()})"
-            print(f"  • {s['id']:<16} {cat:<10} - {s['name']}{flight}: {s['description']}")
+            arch = " [Archived]" if s["id"] in ARCHIVED_ROSTER else ""
+            print(f"  • {s['id']:<16} {cat:<10} - {s['name']}{flight}{arch}: {s['description']}")
+        if not dev_mode:
+            print("\n  💡 (29 archived characters hidden. Pass --dev to list all characters.)")
         return
 
     if args.stats:
@@ -224,12 +243,20 @@ def main():
             print("No running Buddy instance found.")
             return
 
+    if args.control_center:
+        from platforms import is_macos
+        act = "control_center" if is_macos() else "skins"
+        if send_daemon_command({"action": act}):
+            return
+
     if args.settings:
         if send_daemon_command({"action": "settings"}):
             return
 
     if args.skins:
-        if send_daemon_command({"action": "skins"}):
+        from platforms import is_macos
+        act = "control_center" if is_macos() else "skins"
+        if send_daemon_command({"action": act}):
             return
 
     if args.quit:
@@ -249,33 +276,47 @@ def main():
 
     target_skin = skin_manager.normalize_skin_id(args.skin) if args.skin else None
 
+    # Gate archived characters by Developer Mode
+    if target_skin and skin_manager.is_archived(target_skin) and not dev_mode:
+        from skins.manager import ACTIVE_ROSTER
+        print(f"❌ Character '{target_skin}' is archived. Active roster: {', '.join(ACTIVE_ROSTER)}.")
+        print("💡 Enable Developer Mode (--dev, --debug, or via Settings in Control Center) to access archived characters.")
+        return
+
     if target_skin and send_daemon_command({"action": "switch_skin", "skin_id": target_skin}):
         print(f"⚡ Switched running Buddy to skin: {target_skin.upper()}")
         return
 
-    # If already running without extra args, open skins gallery dialog
-    if not target_skin and not args.mode and not args.pause and not args.resume and not args.settings and not args.skins and not args.quit and not args.pomodoro:
-        if send_daemon_command({"action": "skins"}):
-            print("⚡ Buddy is already running on desktop! Opened Character Skin Gallery.")
+    # Single-instance protection via exclusive flock
+    from core.lifecycle import SingleInstanceLock
+    app_lock = SingleInstanceLock()
+    if not app_lock.acquire():
+        # Another Buddy process is already running!
+        from platforms import is_macos
+        act = "control_center" if is_macos() else "skins"
+        if not target_skin and not args.mode and not args.pause and not args.resume and not args.settings and not args.skins and not args.quit and not args.pomodoro:
+            send_daemon_command({"action": act})
+            print("⚡ Buddy is already running! Brought Buddy Control Center forward.")
+            return
+        elif target_skin:
+            send_daemon_command({"action": "switch_skin", "skin_id": target_skin})
+            print(f"⚡ Switched running Buddy to skin: {target_skin.upper()}")
+            return
+        else:
+            send_daemon_command({"action": act})
             return
 
-    # Clean up stale previous process if socket was dead but process hung
-    if PID_FILE.exists():
-        try:
-            import time
-            old_pid = int(PID_FILE.read_text().strip())
-            os.kill(old_pid, 0)
-            print(f"Cleaning up previous Buddy process (PID {old_pid})...")
-            os.kill(old_pid, signal.SIGTERM)
-            time.sleep(0.3)
-        except Exception:
-            pass
+    # SIGHUP and SIGTERM handling
 
     # SIGHUP and SIGTERM handling
     if hasattr(signal, "SIGHUP"):
         signal.signal(signal.SIGHUP, signal.SIG_IGN)
 
     def _cleanup_files():
+        try:
+            app_lock.release()
+        except Exception:
+            pass
         for f in (SOCKET_FILE, PID_FILE):
             try:
                 if f.exists():
@@ -319,6 +360,11 @@ def main():
     print(f"⚡ Buddy Desktop Companion v{VERSION} launched successfully on display!")
     print(f"Active Skin: {engine.character.skin_id.upper()}")
     print("Press Ctrl+C in terminal or right-click pet / tray icon to configure or quit.")
+
+    from platforms import is_macos
+    if is_macos():
+        if args.control_center or (not args.skin and not args.mode and not args.debug):
+            engine.open_control_center()
 
     engine.run()
 

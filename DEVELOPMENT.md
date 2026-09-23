@@ -1,11 +1,11 @@
-# 🛠️ Buddy 2.0 Developer Guide & Architecture
+# Buddy 2.0 Developer Guide & Architecture
 
 This document describes the internal architecture of **Buddy 2.0** and how to contribute, debug, and extend the engine.
 For detailed instructions on creating new characters and understanding the cross-platform rendering pipeline, see [**`ARCHITECTURE.md`**](ARCHITECTURE.md).
 
 ---
 
-## 🏛️ System Architecture
+## System Architecture
 
 Buddy is architected into modular sub-engines:
 
@@ -75,7 +75,7 @@ Buddy Desktop Platform Engine
 
 ---
 
-## 🔬 Physics & Simulation Loop
+## Physics & Simulation Loop
 
 1. **Input Polling**: Queries the root pointer position from native windowing system (AppKit on macOS, GDK default seat on Linux) at each frame interval (16.6ms for 60 FPS).
 2. **Pomodoro Synchronization**:
@@ -94,7 +94,7 @@ Buddy Desktop Platform Engine
 
 ---
 
-## 🔍 Developer HUD Mode
+## Developer HUD Mode
 
 Launch Buddy with the `--debug` flag to enable the real-time diagnostics HUD:
 
@@ -110,7 +110,7 @@ The HUD displays:
 
 ---
 
-## 🧪 Running Unit Tests
+## Running Unit Tests
 
 Run the full automated test suite anytime during development:
 

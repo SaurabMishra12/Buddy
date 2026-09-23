@@ -1,10 +1,10 @@
-# 🔧 Buddy 2.0 Troubleshooting Guide
+# Buddy 2.0 Troubleshooting Guide
 
 Common questions, desktop integration solutions, and tips for Linux systems.
 
 ---
 
-## 🖥️ Wayland vs X11 Compatibility
+## Wayland vs X11 Compatibility
 
 ### Symptoms:
 * Cursor is not tracked when outside the Buddy overlay.
@@ -29,7 +29,7 @@ sudo pacman -S gtk3 python-cairo python-gobject
 
 ---
 
-## 🍅 Pomodoro Notifications & DBus
+## Pomodoro Notifications & DBus
 
 ### Symptoms:
 * Focus session or break end alerts do not appear on your desktop.
@@ -51,7 +51,7 @@ notify-send "Buddy Test" "Notifications are working!"
 
 ---
 
-## 🖱️ Mouse Clicks and Window Interaction
+## Mouse Clicks and Window Interaction
 
 ### "Clicks pass through Buddy and I can't click the companion"
 * **Normal Behavior**: When **"100% Click-Through Overlay"** is enabled, Buddy passes all mouse events to the background so that it never disrupts your terminal, code editor, or browser workflow.
@@ -62,7 +62,7 @@ notify-send "Buddy Test" "Notifications are working!"
 
 ---
 
-## 🔊 Audio & Sound Effects
+## Audio & Sound Effects
 
 ### "I don't hear any sounds"
 1. Verify that sound is enabled:
@@ -84,7 +84,7 @@ notify-send "Buddy Test" "Notifications are working!"
 
 ---
 
-## ⚡ Performance Optimization
+## Performance Optimization
 
 Buddy 2.0 provides adaptive quality presets in `buddy --settings` $\to$ **Performance**:
 * **Low**: 30 FPS cap, 100 particle limit, screen shake disabled. Ideal for low-power laptops on battery.
@@ -94,7 +94,7 @@ Buddy 2.0 provides adaptive quality presets in `buddy --settings` $\to$ **Perfor
 
 ---
 
-## 🔄 Resetting Configuration & Statistics
+## Resetting Configuration & Statistics
 
 If you ever wish to restore factory defaults:
 ```bash

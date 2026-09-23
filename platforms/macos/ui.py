@@ -36,6 +36,14 @@ def show_macos_context_menu(engine: Any, event: Any) -> None:
     menu = AppKit.NSMenu.alloc().init()
     menu.setAutoenablesItems_(False)
 
+    # 0. Buddy Control Center
+    cc_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+        "🎛️ Buddy Control Center...", "onControlCenter:", ""
+    )
+    cc_item.setTarget_(ctrl)
+    menu.addItem_(cc_item)
+    menu.addItem_(AppKit.NSMenuItem.separatorItem())
+
     # 1. Signature Move
     sig_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
         "⚡ Perform Signature Move", "onSignatureMove:", ""

@@ -756,6 +756,26 @@ class ParticleManager:
         self.enabled: bool = True
 
     @property
+    def particle_count(self) -> int:
+        """Zero-allocation count of all active particulate entities."""
+        return (
+            len(self.sparks)
+            + len(self.flames)
+            + len(self.smoke)
+            + len(self.hearts)
+            + len(self.stars)
+            + len(self.confetti)
+            + len(self.dust)
+            + len(self.orbs)
+            + len(self.cherry_petals)
+            + len(self.ice_crystals)
+            + len(self.getsuga_slashes)
+            + len(self.reiatsu_auras)
+            + len(self.shockwaves)
+            + len(self.bolts)
+        )
+
+    @property
     def particles(self) -> List[Any]:
         """Aggregate list of all active particulate entities."""
         return (
@@ -981,6 +1001,44 @@ class ParticleManager:
             if len(self.reiatsu_auras) >= self.max_particles:
                 break
             self.reiatsu_auras.append(ReiatsuAuraParticle(x, y, color=color))
+
+    def spawn_generic(self, effect_type: str, x: float = 0.0, y: float = 0.0, **kwargs) -> None:
+        """Generic dispatcher for composable ability particle effects."""
+        if not self.enabled:
+            return
+        x = kwargs.pop("x", x)
+        y = kwargs.pop("y", y)
+        raw_rate = kwargs.get("rate", kwargs.get("count", 8))
+        rate = max(1, min(int(raw_rate), 32))
+        color = kwargs.get("color", CYAN_GLOW)
+        if len(color) == 4:
+            color = (color[0], color[1], color[2])
+
+        if effect_type in ["sparks", "speed_lines", "trail", "lightning_sparks"]:
+            self.burst_sparks(x, y, count=rate, color=color)
+        elif effect_type in ["energy_gather", "black_gravity", "black_red_whirl", "black_green_charge"]:
+            self.burst_energy_orbs(x, y, count=min(4, rate), color=color)
+        elif effect_type in ["power_pillar", "reiatsu"]:
+            self.burst_reiatsu(x, y, color=color, count=rate)
+        elif effect_type in ["petal_storm", "cherry_petals"]:
+            self.burst_cherry_petals(x, y, count=rate)
+        elif effect_type in ["frost_petals", "snow_crystals", "ice_crystals"]:
+            self.burst_ice_crystals(x, y, count=rate)
+        elif effect_type in ["smoke_cloud", "smoke"]:
+            self.smoke_puff(x, y, count=rate, color=color)
+        elif effect_type in ["happy_stars", "stars"]:
+            self.burst_stars(x, y, count=rate, color=color)
+        elif effect_type in ["paw_prints", "hearts"]:
+            self.burst_hearts(x, y, count=rate)
+        elif effect_type in ["confetti", "confetti_burst"]:
+            self.burst_confetti(x, y, count=rate)
+        elif effect_type in ["ring_burst", "shockwave"]:
+            radius = kwargs.get("radius", 60.0)
+            self.shockwave(x, y, max_radius=radius, color=color)
+        elif effect_type in ["flame", "blue_flame_trail"]:
+            self.flame_puff(x, y, count=rate)
+        else:
+            self.burst_sparks(x, y, count=rate, color=color)
 
     def update(self) -> None:
         """Update simulation for all particles, removing dead ones."""

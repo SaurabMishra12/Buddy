@@ -44,7 +44,8 @@ class SpaceRobotCharacter(BaseCharacter):
         if ability_name in ("scanning_beam", "scan_beam"):
             self.scanning_beam_timer = time.time() + 1.8
             particle_mgr.energy_orbs(self.x, self.y, count=3, color=(0.1, 0.9, 1.0))
-            audio_mgr.play("laser")
+            if audio_mgr:
+                audio_mgr.play("laser")
             self.memory.record_interaction("scanning_beam")
             return True
 
@@ -58,14 +59,16 @@ class SpaceRobotCharacter(BaseCharacter):
             particle_mgr.shockwave(self.x, self.y, max_radius=70.0, color=(0.2, 0.9, 1.0))
             for _ in range(8):
                 particle_mgr.burst_sparks(self.x, self.y + 16, count=3, color=(0.1, 0.95, 1.0))
-            audio_mgr.play("jet")
+            if audio_mgr:
+                audio_mgr.play("jet")
             self.memory.record_interaction("jet_boost")
             return True
 
         elif ability_name in ("hologram", "celebrate"):
             self.hologram_alpha = 1.0
             particle_mgr.burst_stars(self.x, self.y - 32, count=12, color=(0.25, 0.92, 1.0))
-            audio_mgr.play("magic")
+            if audio_mgr:
+                audio_mgr.play("magic")
             self.memory.record_interaction("hologram")
             return True
 

@@ -18,13 +18,45 @@ from typing import Tuple, List, Optional
 import AppKit
 
 
+def get_primary_screen() -> Optional['AppKit.NSScreen']:
+    """Returns the primary display (explicit frame.origin == (0, 0) match).
+    
+    In AppKit coordinate space, the primary display (with the menu bar) has
+    its origin at (0, 0).
+    """
+    screens = AppKit.NSScreen.screens()
+    if not screens:
+        return None
+    for s in screens:
+        f = s.frame()
+        if f.origin.x == 0.0 and f.origin.y == 0.0:
+            return s
+    return screens[0]
+
+
 def get_primary_screen_frame() -> Tuple[float, float, float, float]:
     """Returns (origin_x, origin_y, width, height) of the primary display in AppKit space."""
-    screens = AppKit.NSScreen.screens()
-    if screens and len(screens) > 0:
-        f = screens[0].frame()
+    primary = get_primary_screen()
+    if primary is not None:
+        f = primary.frame()
         return float(f.origin.x), float(f.origin.y), float(f.size.width), float(f.size.height)
     return 0.0, 0.0, 1920.0, 1080.0
+
+
+def get_main_screen() -> 'AppKit.NSScreen':
+    """Returns the screen with the currently focused window (or primary as fallback).
+
+    Use this for queries that should match the user's active display:
+    backingScaleFactor, visibleFrame for window placement, etc.
+    Do NOT use this for coordinate-origin math — use get_primary_screen_frame() instead.
+    """
+    main = AppKit.NSScreen.mainScreen()
+    if main is not None:
+        return main
+    screens = AppKit.NSScreen.screens()
+    if screens and len(screens) > 0:
+        return screens[0]
+    return None
 
 
 def get_primary_screen_height() -> float:
@@ -43,7 +75,7 @@ def get_virtual_desktop_bounds() -> Tuple[float, float, float, float]:
     if not screens:
         return 0.0, 0.0, 1920.0, 1080.0
 
-    primary_h = screens[0].frame().size.height
+    primary_h = get_primary_screen_height()
 
     min_bx = float("inf")
     min_by = float("inf")

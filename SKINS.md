@@ -1,10 +1,10 @@
-# 🎨 Creating Custom Skins for Buddy 2.0
+# Creating Custom Skins for Buddy 2.0
 
 Buddy features a modular, data-driven skin architecture. You can add new characters without modifying the core engine code.
 
 ---
 
-## 📁 Skin Directory Structure
+## Skin Directory Structure
 
 User-defined skins live in `~/.config/buddy/skins/<skin_id>/`:
 
@@ -19,7 +19,7 @@ User-defined skins live in `~/.config/buddy/skins/<skin_id>/`:
 
 ---
 
-## 📄 `skin.json` Specification (Buddy 2.0 Schema)
+## `skin.json` Specification (Buddy 2.0 Schema)
 
 Example `skin.json`:
 
@@ -75,7 +75,7 @@ Example `skin.json`:
 
 ---
 
-## 💻 Writing a Character Class in Python
+## Writing a Character Class in Python
 
 To provide custom physics or rendering, create `character.py` inside your skin directory:
 

@@ -13,6 +13,7 @@ from Quartz import (
     CGColorSpaceCreateDeviceRGB, CGDataProviderCreateWithData, CGImageCreate,
     CGContextDrawImage, CGContextSaveGState, CGContextRestoreGState,
     CGContextTranslateCTM, CGContextScaleCTM,
+    CGBitmapContextCreate, CGBitmapContextCreateImage,
     kCGBitmapByteOrder32Host, kCGImageAlphaPremultipliedFirst
 )
 
@@ -64,14 +65,10 @@ class SkyStrikeView(AppKit.NSView):
         owner.bolt2.draw(ctx)
         owner.surface.flush()
 
-        data = bytes(owner.surface.get_data())
-        provider = CGDataProviderCreateWithData(None, data, len(data), None)
-        cg_img = CGImageCreate(
-            owner.width, owner.height, 8, 32, owner.stride, owner.color_space,
-            kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst,
-            provider, None, False, 0
-        )
+        cg_img = CGBitmapContextCreateImage(owner.cg_bitmap_ctx)
         if cg_img:
+            if self.layer():
+                self.layer().setContents_(cg_img)
             ns_ctx = AppKit.NSGraphicsContext.currentContext().CGContext()
             CGContextSaveGState(ns_ctx)
             CGContextTranslateCTM(ns_ctx, 0, rect.size.height)
@@ -94,6 +91,24 @@ class WebRopeView(AppKit.NSView):
     def drawRect_(self, rect):
         if hasattr(self, "_owner") and self._owner:
             self._owner.render_cairo_to_view(rect)
+
+
+class WorldEffectView(AppKit.NSView):
+    """Retina-ready high-performance view for world-space VFX (Getsuga, Cero, Fire, Ice Dragon)."""
+    def isFlipped(self):
+        return True
+
+    def drawRect_(self, rect):
+        if not hasattr(self, "_owner") or not self._owner:
+            return
+        owner = self._owner
+        owner.render_to_view(rect)
+
+
+class WorldEffectTimerTarget(NSObject):
+    def onTick_(self, timer):
+        if hasattr(self, "_owner") and self._owner:
+            self._owner.on_tick()
 
 
 class BuddyNSPanel(AppKit.NSPanel):
@@ -153,14 +168,19 @@ class BuddyOverlayView(AppKit.NSView):
                 pass
         overlay.surface.flush()
 
-        data = bytes(overlay.surface.get_data())
-        provider = CGDataProviderCreateWithData(None, data, len(data), None)
-        cg_img = CGImageCreate(
-            overlay.pixel_w, overlay.pixel_h, 8, 32,
-            overlay.stride, overlay.color_space,
-            kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst,
-            provider, None, False, 0
-        )
+        cg_img = None
+        if hasattr(overlay, "cg_bitmap_ctx") and overlay.cg_bitmap_ctx:
+            cg_img = CGBitmapContextCreateImage(overlay.cg_bitmap_ctx)
+        elif hasattr(overlay, "surface"):
+            data = bytes(overlay.surface.get_data())
+            provider = CGDataProviderCreateWithData(None, data, len(data), None)
+            cg_img = CGImageCreate(
+                overlay.pixel_w, overlay.pixel_h, 8, 32,
+                overlay.stride, overlay.color_space,
+                kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst,
+                provider, None, False, 0
+            )
+
         if cg_img:
             ns_ctx = AppKit.NSGraphicsContext.currentContext().CGContext()
             CGContextSaveGState(ns_ctx)
@@ -172,57 +192,76 @@ class BuddyOverlayView(AppKit.NSView):
     def mouseDown_(self, event):
         if not hasattr(self, "overlay_ref") or not self.overlay_ref:
             return
-        loc = self.convertPoint_fromView_(event.locationInWindow(), None)
-        ev = EventProxy(
-            button=1,
-            x=loc.x,
-            y=loc.y,
-            type=5 if event.clickCount() >= 2 else 4
-        )
-        if self.overlay_ref.on_button_press_cb:
-            self.overlay_ref.on_button_press_cb(self, ev)
+        try:
+            loc = self.convertPoint_fromView_(event.locationInWindow(), None)
+            ev = EventProxy(
+                button=1,
+                x=loc.x,
+                y=loc.y,
+                type=5 if event.clickCount() >= 2 else 4
+            )
+            if self.overlay_ref.on_button_press_cb:
+                self.overlay_ref.on_button_press_cb(self, ev)
+        except Exception as e:
+            print(f"[Buddy Overlay] Error in mouseDown_: {e}", file=sys.stderr)
 
     def mouseDragged_(self, event):
         if not hasattr(self, "overlay_ref") or not self.overlay_ref:
             return
-        loc = self.convertPoint_fromView_(event.locationInWindow(), None)
-        ev = EventProxy(x=loc.x, y=loc.y)
-        if self.overlay_ref.on_motion_cb:
-            self.overlay_ref.on_motion_cb(self, ev)
+        try:
+            loc = self.convertPoint_fromView_(event.locationInWindow(), None)
+            ev = EventProxy(x=loc.x, y=loc.y)
+            if self.overlay_ref.on_motion_cb:
+                self.overlay_ref.on_motion_cb(self, ev)
+        except Exception as e:
+            print(f"[Buddy Overlay] Error in mouseDragged_: {e}", file=sys.stderr)
 
     def mouseUp_(self, event):
         if not hasattr(self, "overlay_ref") or not self.overlay_ref:
             return
-        loc = self.convertPoint_fromView_(event.locationInWindow(), None)
-        ev = EventProxy(button=1, x=loc.x, y=loc.y)
-        if self.overlay_ref.on_button_release_cb:
-            self.overlay_ref.on_button_release_cb(self, ev)
+        try:
+            loc = self.convertPoint_fromView_(event.locationInWindow(), None)
+            ev = EventProxy(button=1, x=loc.x, y=loc.y)
+            if self.overlay_ref.on_button_release_cb:
+                self.overlay_ref.on_button_release_cb(self, ev)
+        except Exception as e:
+            print(f"[Buddy Overlay] Error in mouseUp_: {e}", file=sys.stderr)
 
     def rightMouseDown_(self, event):
         if not hasattr(self, "overlay_ref") or not self.overlay_ref:
             return
-        loc = self.convertPoint_fromView_(event.locationInWindow(), None)
-        ev = EventProxy(button=3, x=loc.x, y=loc.y, ns_event=event)
-        if self.overlay_ref.on_button_press_cb:
-            self.overlay_ref.on_button_press_cb(self, ev)
+        try:
+            loc = self.convertPoint_fromView_(event.locationInWindow(), None)
+            ev = EventProxy(button=3, x=loc.x, y=loc.y, ns_event=event)
+            if self.overlay_ref.on_button_press_cb:
+                self.overlay_ref.on_button_press_cb(self, ev)
+        except Exception as e:
+            print(f"[Buddy Overlay] Error in rightMouseDown_: {e}", file=sys.stderr)
 
     def otherMouseDown_(self, event):
         if not hasattr(self, "overlay_ref") or not self.overlay_ref:
             return
-        if event.buttonNumber() == 2:
-            loc = self.convertPoint_fromView_(event.locationInWindow(), None)
-            ev = EventProxy(button=2, x=loc.x, y=loc.y)
-            if self.overlay_ref.on_button_press_cb:
-                self.overlay_ref.on_button_press_cb(self, ev)
+        try:
+            if event.buttonNumber() == 2:
+                loc = self.convertPoint_fromView_(event.locationInWindow(), None)
+                ev = EventProxy(button=2, x=loc.x, y=loc.y)
+                if self.overlay_ref.on_button_press_cb:
+                    self.overlay_ref.on_button_press_cb(self, ev)
+        except Exception as e:
+            print(f"[Buddy Overlay] Error in otherMouseDown_: {e}", file=sys.stderr)
 
     def scrollWheel_(self, event):
         if not hasattr(self, "overlay_ref") or not self.overlay_ref:
             return
-        dy = event.deltaY()
-        direction = ScrollDirection.UP if dy > 0 else ScrollDirection.DOWN
-        ev = EventProxy(direction=direction, delta_y=dy)
-        if self.overlay_ref.on_scroll_cb:
-            self.overlay_ref.on_scroll_cb(self, ev)
+        try:
+            dy = event.deltaY()
+            direction = ScrollDirection.UP if dy > 0 else ScrollDirection.DOWN
+            ev = EventProxy(direction=direction, delta_y=dy)
+            if self.overlay_ref.on_scroll_cb:
+                self.overlay_ref.on_scroll_cb(self, ev)
+        except Exception as e:
+            print(f"[Buddy Overlay] Error in scrollWheel_: {e}", file=sys.stderr)
+
 
 
 class TransientLightning:
@@ -349,13 +388,21 @@ class MacOSSkyStrikeWindow:
         )
         self.frames = 0
 
-        self.surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, self.width, self.height)
+        self.stride = cairo.ImageSurface.format_stride_for_width(cairo.FORMAT_ARGB32, self.width)
+        self.pixel_buf = bytearray(self.stride * self.height)
+        self.surface = cairo.ImageSurface.create_for_data(
+            self.pixel_buf, cairo.FORMAT_ARGB32, self.width, self.height, self.stride
+        )
         self.cairo_ctx = cairo.Context(self.surface)
         self.color_space = CGColorSpaceCreateDeviceRGB()
-        self.stride = cairo.ImageSurface.format_stride_for_width(cairo.FORMAT_ARGB32, self.width)
+        self.cg_bitmap_ctx = CGBitmapContextCreate(
+            self.pixel_buf, self.width, self.height, 8, self.stride, self.color_space,
+            kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst
+        )
 
         self.view = SkyStrikeView.alloc().initWithFrame_(NSRect(NSPoint(0, 0), NSSize(self.width, self.height)))
         self.view._owner = self
+        self.view.setWantsLayer_(True)
         self.window.setContentView_(self.view)
         self.window.orderFrontRegardless()
 
@@ -378,6 +425,776 @@ class MacOSSkyStrikeWindow:
             self.window.close()
             return
         self.view.setNeedsDisplay_(True)
+
+
+class MacOSWorldEffectWindow:
+    """Transient, high-DPI desktop overlay window for expansive Bleach VFX (500-1500+ px).
+    Decouples visual effect footprint from the character's local ~180px window.
+    Reuses a single pooled instance across abilities to avoid redundant window creation.
+    """
+    _active_instance: Optional['MacOSWorldEffectWindow'] = None
+
+    @classmethod
+    def trigger(
+        cls,
+        effect_type: str,
+        start_x: float,
+        start_y: float,
+        target_x: float,
+        target_y: float,
+        **kwargs
+    ) -> 'MacOSWorldEffectWindow':
+        inst = cls._active_instance
+        if inst is not None and inst.window is not None:
+            inst.reset_and_show(effect_type, start_x, start_y, target_x, target_y, **kwargs)
+            return inst
+        inst = cls(effect_type, start_x, start_y, target_x, target_y, **kwargs)
+        cls._active_instance = inst
+        return inst
+
+    def __init__(
+        self,
+        effect_type: str,
+        start_x: float,
+        start_y: float,
+        target_x: float,
+        target_y: float,
+        **kwargs
+    ):
+        self._init_state(effect_type, start_x, start_y, target_x, target_y, **kwargs)
+
+        frame = NSRect(NSPoint(self.appkit_x, self.appkit_y), NSSize(self.width, self.height))
+        self.window = AppKit.NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+            frame,
+            AppKit.NSWindowStyleMaskBorderless,
+            AppKit.NSBackingStoreBuffered,
+            False
+        )
+        self.window.setOpaque_(False)
+        self.window.setBackgroundColor_(AppKit.NSColor.clearColor())
+        self.window.setHasShadow_(False)
+        self.window.setLevel_(AppKit.NSFloatingWindowLevel)
+        self.window.setIgnoresMouseEvents_(True)
+        self.window.setCollectionBehavior_(
+            AppKit.NSWindowCollectionBehaviorCanJoinAllSpaces |
+            AppKit.NSWindowCollectionBehaviorStationary |
+            AppKit.NSWindowCollectionBehaviorFullScreenAuxiliary
+        )
+
+        self._init_surface()
+
+        self.view = WorldEffectView.alloc().initWithFrame_(NSRect(NSPoint(0, 0), NSSize(self.width, self.height)))
+        self.view._owner = self
+        self.view.setWantsLayer_(True)
+        self.window.setContentView_(self.view)
+        self.window.orderFrontRegardless()
+
+        self._timer_target = WorldEffectTimerTarget.alloc().init()
+        self._timer_target._owner = self
+
+        self.timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+            0.016, self._timer_target, "onTick:", None, True
+        )
+        NSRunLoop.currentRunLoop().addTimer_forMode_(self.timer, NSRunLoopCommonModes)
+
+    def _init_state(self, effect_type: str, start_x: float, start_y: float, target_x: float, target_y: float, **kwargs):
+        self.effect_type = effect_type.lower()
+        self.start_bx = float(start_x)
+        self.start_by = float(start_y)
+        self.target_bx = float(target_x)
+        self.target_by = float(target_y)
+        self.kwargs = kwargs
+
+        # Dynamic world-space bounding box with generous padding
+        pad = 260.0
+        min_bx = min(self.start_bx, self.target_bx) - pad
+        max_bx = max(self.start_bx, self.target_bx) + pad
+        min_by = min(self.start_by, self.target_by) - pad
+        max_by = max(self.start_by, self.target_by) + pad
+
+        self.width = max(550, min(1800, int(max_bx - min_bx)))
+        self.height = max(420, min(1400, int(max_by - min_by)))
+        self.min_bx = min_bx
+        self.min_by = min_by
+
+        primary_h = get_primary_screen_height()
+        self.appkit_x = float(min_bx)
+        self.appkit_y = float(primary_h - (min_by + self.height))
+        self.frames = 0
+        self.max_frames = int(self.kwargs.get("duration_frames", 42))
+
+    def _init_surface(self):
+        self.stride = cairo.ImageSurface.format_stride_for_width(cairo.FORMAT_ARGB32, self.width)
+        self.pixel_buf = bytearray(self.stride * self.height)
+        self.surface = cairo.ImageSurface.create_for_data(
+            self.pixel_buf, cairo.FORMAT_ARGB32, self.width, self.height, self.stride
+        )
+        self.cairo_ctx = cairo.Context(self.surface)
+        self.color_space = CGColorSpaceCreateDeviceRGB()
+        self.cg_bitmap_ctx = CGBitmapContextCreate(
+            self.pixel_buf, self.width, self.height, 8, self.stride, self.color_space,
+            kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst
+        )
+
+    def reset_and_show(self, effect_type: str, start_x: float, start_y: float, target_x: float, target_y: float, **kwargs):
+        if self.timer:
+            try:
+                self.timer.invalidate()
+            except Exception:
+                pass
+            self.timer = None
+
+        old_w, old_h = self.width, self.height
+        self._init_state(effect_type, start_x, start_y, target_x, target_y, **kwargs)
+
+        if self.width != old_w or self.height != old_h:
+            self._init_surface()
+            self.view.setFrame_(NSRect(NSPoint(0, 0), NSSize(self.width, self.height)))
+            self.window.setFrame_display_(NSRect(NSPoint(self.appkit_x, self.appkit_y), NSSize(self.width, self.height)), True)
+        else:
+            self.window.setFrameOrigin_(NSPoint(self.appkit_x, self.appkit_y))
+
+        self.timer = NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+            0.016, self._timer_target, "onTick:", None, True
+        )
+        NSRunLoop.currentRunLoop().addTimer_forMode_(self.timer, NSRunLoopCommonModes)
+        self.window.orderFrontRegardless()
+        self.view.setNeedsDisplay_(True)
+
+    def on_tick(self):
+        self.frames += 1
+        if self.frames >= self.max_frames:
+            if self.timer:
+                self.timer.invalidate()
+                self.timer = None
+            self.window.orderOut_(None)
+            return
+        self.view.setNeedsDisplay_(True)
+
+    def destroy(self):
+        if self.timer:
+            try:
+                self.timer.invalidate()
+            except Exception:
+                pass
+            self.timer = None
+        if self.window:
+            try:
+                self.window.close()
+            except Exception:
+                pass
+            self.window = None
+        if MacOSWorldEffectWindow._active_instance is self:
+            MacOSWorldEffectWindow._active_instance = None
+
+    def render_to_view(self, rect):
+        ctx = self.cairo_ctx
+        ctx.save()
+        ctx.set_operator(cairo.OPERATOR_CLEAR)
+        ctx.paint()
+        ctx.restore()
+
+        ctx.save()
+        self.draw_effect(ctx)
+        ctx.restore()
+        self.surface.flush()
+
+        cg_img = None
+        if hasattr(self, "cg_bitmap_ctx") and self.cg_bitmap_ctx:
+            cg_img = CGBitmapContextCreateImage(self.cg_bitmap_ctx)
+        elif hasattr(self, "surface"):
+            data = bytes(self.surface.get_data())
+            provider = CGDataProviderCreateWithData(None, data, len(data), None)
+            cg_img = CGImageCreate(
+                self.width, self.height, 8, 32, self.stride, self.color_space,
+                kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst,
+                provider, None, False, 0
+            )
+
+        if cg_img:
+            ns_ctx = AppKit.NSGraphicsContext.currentContext().CGContext()
+            CGContextSaveGState(ns_ctx)
+            CGContextTranslateCTM(ns_ctx, 0, rect.size.height)
+            CGContextScaleCTM(ns_ctx, 1.0, -1.0)
+            CGContextDrawImage(ns_ctx, rect, cg_img)
+            CGContextRestoreGState(ns_ctx)
+
+    def draw_effect(self, ctx: cairo.Context):
+        p = self.frames / float(max(1, self.max_frames))
+        sx = self.start_bx - self.min_bx
+        sy = self.start_by - self.min_by
+        tx = self.target_bx - self.min_bx
+        ty = self.target_by - self.min_by
+
+        ef = self.effect_type
+        if "getsuga" in ef:
+            self._draw_getsuga(ctx, p, sx, sy, tx, ty)
+        elif "senkei" in ef:
+            self._draw_senkei(ctx, p, sx, sy, tx, ty)
+        elif "gokei" in ef:
+            self._draw_gokei(ctx, p, sx, sy, tx, ty)
+        elif "senbonzakura" in ef or "kageyoshi" in ef or "petal" in ef:
+            self._draw_senbonzakura(ctx, p, sx, sy, tx, ty)
+        elif "kyokujitsujin" in ef or ("ryujin" in ef and self.kwargs.get("is_bankai", False)):
+            self._draw_kyokujitsujin(ctx, p, sx, sy, tx, ty)
+        elif "ryujin" in ef or "flame" in ef or "fire" in ef:
+            self._draw_ryujin_jakka(ctx, p, sx, sy, tx, ty)
+        elif "hyorinmaru" in ef or "ice_dragon" in ef:
+            self._draw_hyorinmaru(ctx, p, sx, sy, tx, ty)
+        elif "hakuren" in ef:
+            self._draw_hakuren(ctx, p, sx, sy, tx, ty)
+        elif "hakka_no_togame" in ef:
+            self._draw_hakka_no_togame(ctx, p, sx, sy, tx, ty)
+        elif "tsukishiro" in ef or "sode_no_shirayuki" in ef or "frost" in ef:
+            if self.kwargs.get("is_bankai", False):
+                self._draw_hakka_no_togame(ctx, p, sx, sy, tx, ty)
+            else:
+                self._draw_tsukishiro(ctx, p, sx, sy, tx, ty)
+        elif "kyoka" in ef or "illusion" in ef:
+            self._draw_kyoka_suigetsu(ctx, p, sx, sy, tx, ty)
+        elif "kurohitsugi" in ef or "coffin" in ef:
+            self._draw_kurohitsugi(ctx, p, sx, sy, tx, ty)
+        elif "cero" in ef:
+            self._draw_cero_oscuras(ctx, p, sx, sy, tx, ty)
+        elif "lanza" in ef:
+            self._draw_lanza(ctx, p, sx, sy, tx, ty)
+        else:
+            self._draw_getsuga(ctx, p, sx, sy, tx, ty)
+
+    def _draw_getsuga(self, ctx: cairo.Context, p: float, sx: float, sy: float, tx: float, ty: float):
+        """Ichigo's massive travelling crescent getsuga tensho:
+        - Shikai: pale cyan-blue crescent wave, moderate width, clean edge.
+        - Bankai: black core with a vivid crimson/red rim-light outline (not flat obsidian).
+        """
+        is_bankai = bool(self.kwargs.get("is_bankai", False))
+        alpha = math.sin(p * math.pi)
+
+        # Travel along trajectory from start to target
+        dist_x = tx - sx
+        dist_y = ty - sy
+        dist = math.hypot(dist_x, dist_y)
+        if dist < 1.0:
+            dist_x, dist_y, dist = 1.0, 0.0, 1.0
+        nx, ny = dist_x / dist, dist_y / dist
+        cur_dist = dist * (0.1 + 0.9 * p)
+        cx = sx + nx * cur_dist
+        cy = sy + ny * cur_dist
+        angle = math.atan2(ny, nx)
+
+        ctx.save()
+        ctx.translate(cx, cy)
+        ctx.rotate(angle)
+
+        arc_r = 135.0 + 20.0 * math.sin(p * math.pi)
+
+        if is_bankai:
+            # Bankai: Black core with crimson/red rim-light outline
+            ctx.save()
+            ctx.set_source_rgba(0.95, 0.08, 0.15, 0.88 * alpha)
+            ctx.set_line_width(26.0)
+            ctx.arc(0, 0, arc_r, -0.65 * math.pi, 0.65 * math.pi)
+            ctx.stroke()
+            ctx.restore()
+
+            ctx.save()
+            ctx.set_source_rgba(0.02, 0.02, 0.03, 0.98 * alpha)
+            ctx.set_line_width(14.0)
+            ctx.arc(0, 0, arc_r, -0.62 * math.pi, 0.62 * math.pi)
+            ctx.stroke()
+            ctx.restore()
+
+            ctx.save()
+            ctx.set_source_rgba(1.0, 0.25, 0.3, 0.95 * alpha)
+            ctx.set_line_width(3.5)
+            ctx.arc(0, 0, arc_r + 5.0, -0.58 * math.pi, 0.58 * math.pi)
+            ctx.stroke()
+            ctx.restore()
+
+            for trail_i in range(1, 4):
+                t_offset = trail_i * 24.0
+                t_alpha = alpha * (0.6 / trail_i)
+                ctx.save()
+                ctx.set_source_rgba(0.85, 0.08, 0.12, t_alpha)
+                ctx.set_line_width(7.0)
+                ctx.arc(-t_offset, 0, arc_r * (1.0 - trail_i * 0.08), -0.5 * math.pi, 0.5 * math.pi)
+                ctx.stroke()
+                ctx.restore()
+        else:
+            ctx.save()
+            ctx.set_source_rgba(0.2, 0.72, 1.0, 0.55 * alpha)
+            ctx.set_line_width(20.0)
+            ctx.arc(0, 0, arc_r, -0.62 * math.pi, 0.62 * math.pi)
+            ctx.stroke()
+            ctx.restore()
+
+            ctx.save()
+            ctx.set_source_rgba(0.88, 0.96, 1.0, 0.95 * alpha)
+            ctx.set_line_width(9.0)
+            ctx.arc(0, 0, arc_r, -0.60 * math.pi, 0.60 * math.pi)
+            ctx.stroke()
+            ctx.restore()
+
+            ctx.save()
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.98 * alpha)
+            ctx.set_line_width(3.0)
+            ctx.arc(0, 0, arc_r, -0.55 * math.pi, 0.55 * math.pi)
+            ctx.stroke()
+            ctx.restore()
+
+        ctx.restore()
+
+    def _draw_senkei(self, ctx: cairo.Context, p: float, sx: float, sy: float, tx: float, ty: float):
+        """Byakuya's Senkei: four rotating rows of solid glowing blades forming a rectangular cage/cylinder."""
+        alpha = math.sin(p * math.pi)
+        cx, cy = tx, ty
+        rot_angle = p * 2.5
+
+        ctx.save()
+        ctx.translate(cx, cy)
+
+        cage_rx = 180.0
+        cage_ry = 110.0
+        num_blades_per_row = 8
+        blade_h = 70.0
+        blade_w = 5.0
+
+        for row in range(4):
+            row_y_offset = (row - 1.5) * 32.0
+            row_rot = rot_angle + (row * 0.35)
+            for b in range(num_blades_per_row):
+                b_ang = row_rot + (b / float(num_blades_per_row)) * 2 * math.pi
+                bx = cage_rx * math.cos(b_ang)
+                by = cage_ry * math.sin(b_ang) + row_y_offset
+                b_depth = (math.sin(b_ang) + 1.0) * 0.5
+                b_alpha = alpha * (0.4 + 0.6 * b_depth)
+
+                ctx.save()
+                ctx.translate(bx, by)
+                ctx.set_source_rgba(1.0, 0.45, 0.75, 0.75 * b_alpha)
+                ctx.rectangle(-blade_w, -blade_h * 0.5, blade_w * 2, blade_h)
+                ctx.fill()
+                ctx.set_source_rgba(1.0, 0.95, 1.0, 0.95 * b_alpha)
+                ctx.rectangle(-blade_w * 0.4, -blade_h * 0.45, blade_w * 0.8, blade_h * 0.9)
+                ctx.fill()
+                ctx.restore()
+
+        ctx.save()
+        ctx.set_source_rgba(1.0, 0.55, 0.8, 0.45 * alpha)
+        ctx.set_line_width(2.5)
+        for ry_bound in [-60.0, 60.0]:
+            ctx.save()
+            ctx.translate(0, ry_bound)
+            ctx.scale(1.0, cage_ry / cage_rx)
+            ctx.arc(0, 0, cage_rx, 0, 2 * math.pi)
+            ctx.stroke()
+            ctx.restore()
+        ctx.restore()
+
+        ctx.restore()
+
+    def _draw_gokei(self, ctx: cairo.Context, p: float, sx: float, sy: float, tx: float, ty: float):
+        """Byakuya's Gōkei: petals swarm into a sphere around the target, then collapse inward to a point."""
+        alpha = math.sin(p * math.pi)
+        cx, cy = tx, ty
+
+        if p < 0.4:
+            phase_p = p / 0.4
+            sphere_r = 320.0 * phase_p
+        elif p < 0.75:
+            sphere_r = 320.0
+        else:
+            collapse_p = (p - 0.75) / 0.25
+            sphere_r = 320.0 * (1.0 - collapse_p)
+
+        total_petals = 180
+        ctx.save()
+        ctx.translate(cx, cy)
+
+        for i in range(total_petals):
+            seed = i * 0.381966
+            phi = math.acos(max(-1.0, min(1.0, 1.0 - 2.0 * (i / float(total_petals)))))
+            theta = seed * 6.283 + (p * 5.0)
+
+            px = sphere_r * math.sin(phi) * math.cos(theta)
+            py = sphere_r * math.cos(phi) * 0.7 + (sphere_r * math.sin(phi) * math.sin(theta) * 0.3)
+
+            pet_a = alpha * (0.5 + 0.5 * math.sin(phi))
+            ctx.save()
+            ctx.translate(px, py)
+            ctx.rotate(theta)
+            ctx.set_source_rgba(1.0, 0.48, 0.76, pet_a)
+            ctx.scale(1.0, 0.5)
+            ctx.arc(0, 0, 6.0, 0, 6.283)
+            ctx.fill()
+            ctx.restore()
+
+        if p >= 0.75:
+            flash_p = (p - 0.75) / 0.25
+            flash_alpha = math.sin(flash_p * math.pi)
+            ctx.save()
+            ctx.set_source_rgba(1.0, 0.9, 1.0, 0.85 * flash_alpha)
+            ctx.arc(0, 0, 50.0 * (1.0 - flash_p), 0, 2 * math.pi)
+            ctx.fill()
+            ctx.restore()
+
+        ctx.restore()
+
+    def _draw_senbonzakura(self, ctx: cairo.Context, p: float, sx: float, sy: float, tx: float, ty: float):
+        """Byakuya's Senbonzakura Kageyoshi: twin sword pillars + 800px swirling petal vortex."""
+        alpha = math.sin(p * math.pi)
+
+        if p < 0.6:
+            pillar_p = p / 0.6
+            h = 240.0 * (1.0 - pillar_p * 0.5)
+            w = 16.0
+            for side in (-120.0, 120.0):
+                px = sx + side
+                py = sy + 40.0 - h * pillar_p
+                ctx.save()
+                ctx.set_source_rgba(0.9, 0.95, 1.0, 0.7 * (1.0 - pillar_p))
+                ctx.rectangle(px - w / 2, py, w, h)
+                ctx.fill()
+                ctx.restore()
+
+        total_petals = 160
+        max_vortex_r = 380.0 * min(1.0, p * 1.5)
+        for i in range(total_petals):
+            seed = i * 0.381966
+            frac = (i / float(total_petals))
+            r = max_vortex_r * math.sqrt(frac)
+            theta = seed * 6.283 + (p * 4.0) + (frac * 3.0)
+
+            pet_x = sx + r * math.cos(theta)
+            pet_y = sy + (r * 0.45) * math.sin(theta)
+
+            pet_a = alpha * (0.4 + 0.6 * math.sin((frac + p) * math.pi))
+            ctx.save()
+            ctx.translate(pet_x, pet_y)
+            ctx.rotate(theta + seed * 2.0)
+            ctx.set_source_rgba(1.0, 0.52, 0.76, pet_a)
+            ctx.scale(1.0, 0.55)
+            ctx.arc(0, 0, 7.0, 0, 6.283)
+            ctx.fill()
+            ctx.restore()
+
+    def _draw_kyokujitsujin(self, ctx: cairo.Context, p: float, sx: float, sy: float, tx: float, ty: float):
+        """Yamamoto's Zanka no Tachi, East: Kyokujitsujin (Rising Sun's Edge).
+        Flame concentrates purely into the blade edge, instant white-hot incineration on contact.
+        """
+        alpha = math.sin(p * math.pi)
+        dist_x = tx - sx
+        dist_y = ty - sy
+        dist = math.hypot(dist_x, dist_y)
+        if dist < 1.0:
+            dist_x, dist_y, dist = 1.0, 0.0, 1.0
+        nx, ny = dist_x / dist, dist_y / dist
+
+        cur_reach = dist * min(1.0, p * 1.6)
+        ex = sx + nx * cur_reach
+        ey = sy + ny * cur_reach
+
+        ctx.save()
+        ctx.set_source_rgba(0.08, 0.02, 0.02, 0.7 * alpha)
+        ctx.set_line_width(12.0)
+        ctx.move_to(sx, sy)
+        ctx.line_to(ex, ey)
+        ctx.stroke()
+
+        ctx.set_source_rgba(1.0, 0.35, 0.05, 0.85 * alpha)
+        ctx.set_line_width(6.0)
+        ctx.move_to(sx, sy)
+        ctx.line_to(ex, ey)
+        ctx.stroke()
+
+        ctx.set_source_rgba(1.0, 1.0, 1.0, 0.98 * alpha)
+        ctx.set_line_width(2.5)
+        ctx.move_to(sx, sy)
+        ctx.line_to(ex, ey)
+        ctx.stroke()
+
+        if p > 0.4:
+            contact_p = (p - 0.4) / 0.6
+            burst_r = 65.0 * math.sin(contact_p * math.pi)
+            ctx.save()
+            ctx.translate(tx, ty)
+            ctx.set_source_rgba(1.0, 0.4, 0.05, 0.45 * alpha)
+            ctx.arc(0, 0, burst_r * 1.4, 0, 2 * math.pi)
+            ctx.fill()
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95 * alpha)
+            ctx.arc(0, 0, burst_r * 0.6, 0, 2 * math.pi)
+            ctx.fill()
+            ctx.restore()
+
+        ctx.restore()
+
+    def _draw_ryujin_jakka(self, ctx: cairo.Context, p: float, sx: float, sy: float, tx: float, ty: float):
+        """Yamamoto's sweeping fire wave extending across 800-1000px."""
+        alpha = math.sin(p * math.pi)
+        dx = tx - sx
+        facing_dir = 1.0 if dx >= 0 else -1.0
+        wave_front = 750.0 * p * facing_dir
+
+        num_tongues = 14
+        for i in range(num_tongues):
+            t_frac = i / float(num_tongues)
+            bx = sx + (wave_front * t_frac)
+            by = sy + (i - num_tongues / 2.0) * 22.0
+            flame_h = 140.0 * (1.0 - t_frac * 0.4) * (0.8 + 0.4 * math.sin(p * 10.0 + i))
+
+            ctx.save()
+            ctx.set_source_rgba(1.0, 0.35, 0.05, 0.8 * alpha)
+            ctx.move_to(bx - 35.0, by + 20.0)
+            ctx.curve_to(bx, by - flame_h * 0.5, bx + 10.0, by - flame_h, bx + 35.0, by + 20.0)
+            ctx.close_path()
+            ctx.fill()
+            ctx.restore()
+
+            ctx.save()
+            ctx.set_source_rgba(1.0, 0.88, 0.2, 0.9 * alpha)
+            ctx.move_to(bx - 18.0, by + 20.0)
+            ctx.curve_to(bx, by - flame_h * 0.4, bx + 6.0, by - flame_h * 0.7, bx + 18.0, by + 20.0)
+            ctx.close_path()
+            ctx.fill()
+            ctx.restore()
+
+    def _draw_hyorinmaru(self, ctx: cairo.Context, p: float, sx: float, sy: float, tx: float, ty: float):
+        """Hitsugaya's soaring crystalline ice dragon with diamond mist."""
+        alpha = math.sin(p * math.pi)
+        dx = tx - sx
+        dy = ty - sy
+        dist = math.hypot(dx, dy)
+        if dist < 1.0:
+            dist = 1.0
+            dx, dy = 1.0, 0.0
+        nx, ny = dx / dist, dy / dist
+
+        segments = 22
+        body_points = []
+        for i in range(segments):
+            frac = i / float(segments)
+            seg_p = max(0.0, p - (1.0 - frac) * 0.4)
+            wave = math.sin(seg_p * 8.0 + frac * 4.0) * 45.0
+            px = sx + (dx * seg_p) - (ny * wave)
+            py = sy + (dy * seg_p) + (nx * wave)
+            body_points.append((px, py, frac))
+
+        for px, py, frac in body_points:
+            seg_r = (18.0 + 14.0 * frac) * alpha
+            ctx.save()
+            ctx.translate(px, py)
+            ctx.set_source_rgba(0.45, 0.85, 1.0, 0.85 * alpha)
+            ctx.rectangle(-seg_r, -seg_r, seg_r * 2, seg_r * 2)
+            ctx.fill()
+
+            ctx.set_source_rgba(0.95, 0.98, 1.0, 0.95 * alpha)
+            ctx.rectangle(-seg_r * 0.5, -seg_r * 0.5, seg_r, seg_r)
+            ctx.fill()
+            ctx.restore()
+
+    def _draw_hakuren(self, ctx: cairo.Context, p: float, sx: float, sy: float, tx: float, ty: float):
+        """Rukia's Next Dance, Hakuren: directional wave-front of ice fired forward in a widening cone."""
+        alpha = math.sin(p * math.pi)
+        dist_x = tx - sx
+        dist_y = ty - sy
+        dist = math.hypot(dist_x, dist_y)
+        if dist < 1.0:
+            dist_x, dist_y, dist = 1.0, 0.0, 1.0
+        nx, ny = dist_x / dist, dist_y / dist
+        perp_x, perp_y = -ny, nx
+
+        front_dist = dist * (0.2 + 0.8 * p)
+        cx = sx + nx * front_dist
+        cy = sy + ny * front_dist
+
+        ctx.save()
+        cone_width = 160.0 * (0.2 + 0.8 * p)
+        num_spikes = 16
+        for i in range(num_spikes):
+            frac = (i / float(num_spikes - 1)) - 0.5
+            spike_x = cx + perp_x * (frac * cone_width) + (random.Random(i).uniform(-10, 10))
+            spike_y = cy + perp_y * (frac * cone_width) + (random.Random(i).uniform(-10, 10))
+            length = (45.0 + 20.0 * (1.0 - abs(frac))) * alpha
+
+            ctx.save()
+            ctx.set_source_rgba(0.75, 0.92, 1.0, 0.85 * alpha)
+            ctx.set_line_width(3.0)
+            ctx.move_to(spike_x - nx * length, spike_y - ny * length)
+            ctx.line_to(spike_x, spike_y)
+            ctx.stroke()
+
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95 * alpha)
+            ctx.set_line_width(1.2)
+            ctx.move_to(spike_x - nx * length * 0.4, spike_y - ny * length * 0.4)
+            ctx.line_to(spike_x, spike_y)
+            ctx.stroke()
+            ctx.restore()
+
+        ctx.save()
+        ctx.set_source_rgba(0.85, 0.96, 1.0, 0.35 * alpha)
+        ctx.new_path()
+        ctx.move_to(sx, sy)
+        ctx.line_to(cx + perp_x * (cone_width * 0.5), cy + perp_y * (cone_width * 0.5))
+        ctx.line_to(cx - perp_x * (cone_width * 0.5), cy - perp_y * (cone_width * 0.5))
+        ctx.close_path()
+        ctx.fill()
+        ctx.restore()
+
+        ctx.restore()
+
+    def _draw_hakka_no_togame(self, ctx: cairo.Context, p: float, sx: float, sy: float, tx: float, ty: float):
+        """Rukia's Ultimate Hakka no Togame: screen-space frost vignette pulse and absolute zero light pillar."""
+        alpha = math.sin(p * math.pi)
+        cx, cy = tx, ty
+
+        ctx.save()
+        pat = cairo.RadialGradient(cx, cy, 50.0, cx, cy, float(self.width) * 0.7)
+        pat.add_color_stop_rgba(0.0, 1.0, 1.0, 1.0, 0.05 * alpha)
+        pat.add_color_stop_rgba(0.6, 0.85, 0.95, 1.0, 0.25 * alpha)
+        pat.add_color_stop_rgba(1.0, 0.75, 0.90, 1.0, 0.55 * alpha)
+        ctx.set_source(pat)
+        ctx.rectangle(0, 0, self.width, self.height)
+        ctx.fill()
+
+        mandala_r = 340.0 * min(1.0, p * 1.5)
+        ctx.save()
+        ctx.set_source_rgba(0.95, 0.98, 1.0, 0.9 * alpha)
+        ctx.set_line_width(4.5)
+        ctx.arc(cx, cy, mandala_r, 0, 6.283)
+        ctx.stroke()
+        ctx.set_line_width(2.0)
+        ctx.arc(cx, cy, mandala_r * 0.65, 0, 6.283)
+        ctx.stroke()
+        ctx.restore()
+
+        pillar_h = float(self.height) * alpha
+        ctx.save()
+        ctx.set_source_rgba(1.0, 1.0, 1.0, 0.45 * alpha)
+        ctx.rectangle(cx - mandala_r * 0.45, cy - pillar_h, mandala_r * 0.9, pillar_h)
+        ctx.fill()
+        ctx.set_source_rgba(1.0, 1.0, 1.0, 0.85 * alpha)
+        ctx.rectangle(cx - mandala_r * 0.15, cy - pillar_h, mandala_r * 0.3, pillar_h)
+        ctx.fill()
+        ctx.restore()
+
+        ctx.restore()
+
+    def _draw_tsukishiro(self, ctx: cairo.Context, p: float, sx: float, sy: float, tx: float, ty: float):
+        """Rukia's First Dance, Tsukishiro: circular frost ring expanding outward from the ground up."""
+        alpha = math.sin(p * math.pi)
+        cx, cy = tx, ty
+
+        ring_p = min(1.0, p / 0.4)
+        mandala_r = 280.0 * ring_p
+
+        ctx.save()
+        ctx.set_source_rgba(0.95, 0.98, 1.0, 0.85 * alpha)
+        ctx.set_line_width(4.0)
+        ctx.arc(cx, cy, mandala_r, 0, 6.283)
+        ctx.stroke()
+
+        ctx.set_line_width(2.0)
+        ctx.arc(cx, cy, mandala_r * 0.65, 0, 6.283)
+        ctx.stroke()
+
+        if p > 0.25:
+            pillar_p = min(1.0, (p - 0.25) / 0.35)
+            pillar_h = 550.0 * pillar_p * alpha
+            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.40 * alpha)
+            ctx.rectangle(cx - mandala_r * 0.45, cy - pillar_h, mandala_r * 0.9, pillar_h)
+            ctx.fill()
+
+        ctx.restore()
+
+    def _draw_kyoka_suigetsu(self, ctx: cairo.Context, p: float, sx: float, sy: float, tx: float, ty: float):
+        """Aizen's shattered mirror complete hypnosis illusion."""
+        alpha = math.sin(p * math.pi)
+        shatter_r = 300.0 * min(1.0, p * 1.6)
+
+        # Prismatic glass fracture lines
+        ctx.save()
+        ctx.translate(sx, sy)
+        ctx.set_source_rgba(0.7, 0.45, 0.95, 0.75 * alpha)
+        ctx.set_line_width(2.5)
+        for i in range(12):
+            angle = i * (6.283 / 12.0)
+            ctx.move_to(0, 0)
+            ctx.line_to(shatter_r * math.cos(angle), shatter_r * math.sin(angle))
+        ctx.stroke()
+        ctx.restore()
+
+    def _draw_cero_oscuras(self, ctx: cairo.Context, p: float, sx: float, sy: float, tx: float, ty: float):
+        """Ulquiorra's colossal 800-1200px black and emerald Cero beam."""
+        alpha = math.sin(p * math.pi)
+        dx = tx - sx
+        dy = ty - sy
+        dist = max(1.0, math.hypot(dx, dy))
+        nx, ny = dx / dist, dy / dist
+        beam_len = max(900.0, dist * 1.5)
+        ex = sx + nx * beam_len
+        ey = sy + ny * beam_len
+
+        # Roaring emerald outer corona
+        ctx.save()
+        ctx.set_source_rgba(0.08, 0.95, 0.3, 0.85 * alpha)
+        ctx.set_line_width(85.0 * alpha)
+        ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+        ctx.move_to(sx, sy)
+        ctx.line_to(ex, ey)
+        ctx.stroke()
+
+        # Pitch-black void core
+        ctx.set_source_rgba(0.02, 0.02, 0.02, 0.98 * alpha)
+        ctx.set_line_width(38.0 * alpha)
+        ctx.move_to(sx, sy)
+        ctx.line_to(ex, ey)
+        ctx.stroke()
+        ctx.restore()
+
+    def _draw_kurohitsugi(self, ctx: cairo.Context, p: float, sx: float, sy: float, tx: float, ty: float):
+        """Aizen's Hado #90 Kurohitsugi (Black Coffin)."""
+        alpha = math.sin(p * math.pi)
+        cx, cy = tx, ty
+        box_w = 160.0
+        box_h = 360.0 * min(1.0, p * 1.5)
+
+        ctx.save()
+        # Deep obsidian monolithic block
+        ctx.set_source_rgba(0.05, 0.02, 0.08, 0.92 * alpha)
+        ctx.rectangle(cx - box_w / 2, cy - box_h, box_w, box_h)
+        ctx.fill()
+
+        # Deep violet edge runes
+        ctx.set_source_rgba(0.55, 0.15, 0.85, 0.8 * alpha)
+        ctx.set_line_width(3.0)
+        ctx.rectangle(cx - box_w / 2, cy - box_h, box_w, box_h)
+        ctx.stroke()
+        ctx.restore()
+
+    def _draw_lanza(self, ctx: cairo.Context, p: float, sx: float, sy: float, tx: float, ty: float):
+        """Ulquiorra's Lanza del Relampago green lightning javelin and cross detonation."""
+        alpha = math.sin(p * math.pi)
+        cx = sx + (tx - sx) * min(1.0, p * 2.0)
+        cy = sy + (ty - sy) * min(1.0, p * 2.0)
+
+        ctx.save()
+        if p < 0.5:
+            # Flying lightning spear
+            ctx.set_source_rgba(0.1, 1.0, 0.4, 0.9 * alpha)
+            ctx.set_line_width(8.0)
+            ctx.move_to(cx - 30.0, cy)
+            ctx.line_to(cx + 30.0, cy)
+            ctx.stroke()
+        else:
+            # Giant emerald cross detonation
+            cross_size = 280.0 * alpha
+            ctx.set_source_rgba(0.0, 1.0, 0.45, 0.85 * alpha)
+            ctx.set_line_width(26.0 * alpha)
+            ctx.move_to(tx, ty - cross_size)
+            ctx.line_to(tx, ty + cross_size)
+            ctx.move_to(tx - cross_size, ty)
+            ctx.line_to(tx + cross_size, ty)
+            ctx.stroke()
+        ctx.restore()
 
 
 class MacOSWebRopeWindow:
@@ -429,13 +1246,21 @@ class MacOSWebRopeWindow:
             AppKit.NSWindowCollectionBehaviorFullScreenAuxiliary
         )
 
-        self.surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, self.win_w, self.win_h)
+        self.stride = cairo.ImageSurface.format_stride_for_width(cairo.FORMAT_ARGB32, self.win_w)
+        self.pixel_buf = bytearray(self.stride * self.win_h)
+        self.surface = cairo.ImageSurface.create_for_data(
+            self.pixel_buf, cairo.FORMAT_ARGB32, self.win_w, self.win_h, self.stride
+        )
         self.cairo_ctx = cairo.Context(self.surface)
         self.color_space = CGColorSpaceCreateDeviceRGB()
-        self.stride = cairo.ImageSurface.format_stride_for_width(cairo.FORMAT_ARGB32, self.win_w)
+        self.cg_bitmap_ctx = CGBitmapContextCreate(
+            self.pixel_buf, self.win_w, self.win_h, 8, self.stride, self.color_space,
+            kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst
+        )
 
         self.view = WebRopeView.alloc().initWithFrame_(NSRect(NSPoint(0, 0), NSSize(self.win_w, self.win_h)))
         self.view._owner = self
+        self.view.setWantsLayer_(True)
         self.window.setContentView_(self.view)
         self.window.orderFrontRegardless()
 
@@ -659,13 +1484,18 @@ class MacOSWebRopeWindow:
         ctx.restore()
         self.surface.flush()
 
-        data = bytes(self.surface.get_data())
-        provider = CGDataProviderCreateWithData(None, data, len(data), None)
-        cg_img = CGImageCreate(
-            self.win_w, self.win_h, 8, 32, self.stride, self.color_space,
-            kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst,
-            provider, None, False, 0
-        )
+        cg_img = None
+        if hasattr(self, "cg_bitmap_ctx") and self.cg_bitmap_ctx:
+            cg_img = CGBitmapContextCreateImage(self.cg_bitmap_ctx)
+        elif hasattr(self, "surface"):
+            data = bytes(self.surface.get_data())
+            provider = CGDataProviderCreateWithData(None, data, len(data), None)
+            cg_img = CGImageCreate(
+                self.win_w, self.win_h, 8, 32, self.stride, self.color_space,
+                kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst,
+                provider, None, False, 0
+            )
+
         if cg_img:
             ns_ctx = AppKit.NSGraphicsContext.currentContext().CGContext()
             CGContextSaveGState(ns_ctx)
@@ -673,6 +1503,26 @@ class MacOSWebRopeWindow:
             CGContextScaleCTM(ns_ctx, 1.0, -1.0)
             CGContextDrawImage(ns_ctx, rect, cg_img)
             CGContextRestoreGState(ns_ctx)
+
+
+
+class BuddyAppDelegate(NSObject):
+    """Native macOS application delegate handling Dock / Launchpad activation & reopening."""
+
+    def applicationShouldHandleReopen_hasVisibleWindows_(self, sender, flag):
+        try:
+            if hasattr(self, "_engine") and self._engine:
+                self._engine.open_control_center()
+        except Exception as e:
+            print(f"[Buddy AppDelegate] Error handling reopen: {e}", file=sys.stderr)
+        return True
+
+    def applicationWillTerminate_(self, notification):
+        try:
+            from platforms.macos.control_center import close_macos_control_center
+            close_macos_control_center()
+        except Exception:
+            pass
 
 
 class MacOSOverlayWindow(PlatformWindow):
@@ -693,12 +1543,18 @@ class MacOSOverlayWindow(PlatformWindow):
         self.on_button_release_cb = on_button_release
         self.on_motion_cb = on_motion
         self.on_scroll_cb = on_scroll
+        self._engine = None
 
         app = AppKit.NSApplication.sharedApplication()
         app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)
+        self.app_delegate = BuddyAppDelegate.alloc().init()
+        self.app_delegate._engine = None
+        app.setDelegate_(self.app_delegate)
 
-        primary_screens = AppKit.NSScreen.screens()
-        primary = primary_screens[0] if primary_screens else None
+        # Use the main (focused) screen for bounds and backing scale,
+        # not screens()[0] which is only correct for coordinate-origin math.
+        from platforms.macos.coordinate import get_main_screen
+        primary = get_main_screen()
         p_frame = primary.frame() if primary else NSRect(NSPoint(0, 0), NSSize(1920, 1080))
         self.screen_w = float(p_frame.size.width)
         self.screen_h = float(p_frame.size.height)
@@ -709,10 +1565,17 @@ class MacOSOverlayWindow(PlatformWindow):
         self.pixel_h = int(self.win_size * self.backing_scale)
 
         self.stride = cairo.ImageSurface.format_stride_for_width(cairo.FORMAT_ARGB32, self.pixel_w)
-        self.surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, self.pixel_w, self.pixel_h)
+        self.pixel_buf = bytearray(self.stride * self.pixel_h)
+        self.surface = cairo.ImageSurface.create_for_data(
+            self.pixel_buf, cairo.FORMAT_ARGB32, self.pixel_w, self.pixel_h, self.stride
+        )
         self.cairo_ctx = cairo.Context(self.surface)
         self.cairo_ctx.scale(self.backing_scale, self.backing_scale)
         self.color_space = CGColorSpaceCreateDeviceRGB()
+        self.cg_bitmap_ctx = CGBitmapContextCreate(
+            self.pixel_buf, self.pixel_w, self.pixel_h, 8, self.stride, self.color_space,
+            kCGBitmapByteOrder32Host | kCGImageAlphaPremultipliedFirst
+        )
 
         init_frame = NSRect(NSPoint(200, 200), NSSize(self.win_size, self.win_size))
         panel_style = (
@@ -743,6 +1606,7 @@ class MacOSOverlayWindow(PlatformWindow):
 
         self.view = BuddyOverlayView.alloc().initWithFrame_(NSRect(NSPoint(0, 0), NSSize(self.win_size, self.win_size)))
         self.view.overlay_ref = self
+        self.view.setWantsLayer_(True)
         self.window.setContentView_(self.view)
 
     def set_hitbox_mask(self, radius: float = 36.0) -> None:
@@ -775,13 +1639,38 @@ class MacOSOverlayWindow(PlatformWindow):
     def trigger_sky_strike(self, target_x: float, target_y: float) -> None:
         MacOSSkyStrikeWindow(target_x, target_y)
 
+    def trigger_world_vfx(
+        self,
+        effect_type: str,
+        start_x: float,
+        start_y: float,
+        target_x: float,
+        target_y: float,
+        **kwargs
+    ) -> None:
+        """Trigger unclipped, full-desktop Bleach world-space visual effect."""
+        try:
+            MacOSWorldEffectWindow.trigger(effect_type, start_x, start_y, target_x, target_y, **kwargs)
+        except Exception as e:
+            print(f"[MacOSOverlayWindow] Error triggering world VFX '{effect_type}': {e}", file=sys.stderr)
+
     def queue_draw(self) -> None:
         self.view.setNeedsDisplay_(True)
+
+    def set_engine(self, engine: Any) -> None:
+        self._engine = engine
+        if hasattr(self, "app_delegate") and self.app_delegate:
+            self.app_delegate._engine = engine
 
     def show(self) -> None:
         self.window.orderFrontRegardless()
 
     def close(self) -> None:
+        try:
+            if MacOSWorldEffectWindow._active_instance is not None:
+                MacOSWorldEffectWindow._active_instance.destroy()
+        except Exception:
+            pass
         try:
             self.window.close()
         except Exception:

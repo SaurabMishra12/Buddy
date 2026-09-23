@@ -1,0 +1,15 @@
+{
+  "id": "soi_fon",
+  "name": "Soi Fon",
+  "description": "Commander of the Onmitsukidō wielding Suzumebachi stinger and Jakuhō Raikōben Bankai artillery.",
+  "speed": 1.4,
+  "canFly": false,
+  "abilities": [
+    "suzumebachi",
+    "jakuho_raikoben",
+    "stealth_step",
+    "scout_stance",
+    "nigeki_kessatsu"
+  ],
+  "category": "bleach"
+}

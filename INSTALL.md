@@ -1,12 +1,12 @@
-# 📦 Buddy Installation Guide
+# Buddy Installation Guide
 
 This guide covers installing Buddy on **macOS (Apple Silicon & Intel)**, **Fedora Linux**, and other major Linux distributions.
 
 ---
 
-## 🍏 macOS (Apple Silicon & Intel)
+## macOS (Apple Silicon & Intel)
 
-Buddy features native AppKit & PyObjC desktop integration on macOS without requiring X11, XQuartz, or GTK.
+Buddy features native AppKit and PyObjC desktop integration on macOS without requiring X11, XQuartz, or GTK.
 
 ### 1. Prerequisites (Homebrew)
 
@@ -23,9 +23,9 @@ cd /path/to/buddy
 
 The script verifies required packages (`pycairo`, `pyobjc-framework-Cocoa`, `pyobjc-framework-Quartz`), configures `~/Library/Application Support/Buddy`, and links the `buddy` command into `~/.local/bin/buddy`.
 
-### 3. Standalone Application Bundle (`Buddy.app`)
+### 3. Standalone Application Bundle (Buddy.app)
 
-To build and install a standalone `.app` into `/Applications`:
+To build and install a standalone `.app` bundle into `/Applications`:
 
 ```bash
 ./scripts/build_macos_app.sh
@@ -37,7 +37,7 @@ For complete details, architecture, and gestures, see [MACOS.md](MACOS.md).
 
 ---
 
-## 🎩 Fedora Linux (Primary Target)
+## Fedora Linux (Primary Target)
 
 Fedora provides all required libraries in its standard repositories.
 
@@ -58,7 +58,7 @@ The installer will:
 1. Validate required Python and GTK libraries.
 2. Create a symlink in `~/.local/bin/buddy`.
 3. Install the application icon in `~/.local/share/icons/hicolor/`.
-4. Install `buddy.desktop` in `~/.local/share/applications/` and update desktop database.
+4. Install `buddy.desktop` in `~/.local/share/applications/` and update the desktop database.
 
 ### 3. Verify Installation
 
@@ -69,7 +69,7 @@ buddy --version
 
 ---
 
-## 🐧 Ubuntu / Debian / Pop!_OS / Linux Mint
+## Ubuntu / Debian / Pop!_OS / Linux Mint
 
 ### 1. Install Dependencies
 
@@ -87,7 +87,7 @@ cd /path/to/buddy
 
 ---
 
-## 🏹 Arch Linux / Manjaro
+## Arch Linux / Manjaro
 
 ### 1. Install Dependencies
 
@@ -104,7 +104,7 @@ cd /path/to/buddy
 
 ---
 
-## 🦎 openSUSE (Tumbleweed / Leap)
+## openSUSE (Tumbleweed / Leap)
 
 ```bash
 sudo zypper install python3 python3-gobject python3-gobject-Gdk typelib-1_0-Gtk-3_0 libappindicator3-1
@@ -113,14 +113,26 @@ sudo zypper install python3 python3-gobject python3-gobject-Gdk typelib-1_0-Gtk-
 
 ---
 
-## ⚙️ Enabling Autostart on Login
+## Enabling Autostart on Login
 
-You can enable Buddy to start automatically on login in two ways:
+You can configure Buddy to launch automatically on system login:
 
+### On macOS
+Buddy provides a launch agent configuration:
+```bash
+# Enable automatically via the Buddy Control Center:
+buddy --control-center  # Navigate to Settings -> Launch at Login
+```
+Or manually load the LaunchAgent:
+```bash
+launchctl load ~/Library/LaunchAgents/com.saurabmishra.buddy.plist
+```
+
+### On Linux
 1. **Via Settings Dialog**:
-   Run `buddy --settings`, switch to the **Startup** tab, and check **"Start Buddy automatically on login"**.
+   Run `buddy --settings`, switch to the **General** tab, and toggle **"Start Buddy automatically on login"**.
 
-2. **Via CLI / Terminal**:
+2. **Via Desktop Autostart Directory**:
    ```bash
    cp ~/.local/share/applications/buddy.desktop ~/.config/autostart/
    ```

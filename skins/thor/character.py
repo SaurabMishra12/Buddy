@@ -77,18 +77,21 @@ class ThorCharacter(BaseCharacter):
                 )
                 self.thrown_time = time.time()
                 particle_mgr.burst_sparks(hand_x, hand_y, count=16, color=CYAN_GLOW)
-                audio_mgr.play("lightning")
+                if audio_mgr:
+                    audio_mgr.play("lightning")
                 return True
         elif ability_name == "lightning_summon":
             particle_mgr.sky_strike(target_x, target_y)
-            audio_mgr.play("lightning")
+            if audio_mgr:
+                audio_mgr.play("lightning")
             return True
         elif ability_name == "hammer_spin":
             if self.mjolnir.state == "HELD":
                 self.mjolnir.throw(hand_x, hand_y, target_x, target_y, mode="orbit")
                 self.thrown_time = time.time()
                 particle_mgr.shockwave(self.x, self.y, max_radius=65.0)
-                audio_mgr.play("lightning")
+                if audio_mgr:
+                    audio_mgr.play("lightning")
                 return True
         return False
 

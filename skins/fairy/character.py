@@ -40,6 +40,10 @@ class FairyCharacter(BaseCharacter):
         particle_mgr: Any,
         audio_mgr: Any
     ) -> bool:
+        if not audio_mgr:
+            from core.audio import audio_manager
+            audio_mgr = audio_manager
+
         if ability_name in ("sparkle_trail", "sparkle_burst", "sparkle"):
             self.is_looping = True
             self.loop_end_time = time.time() + 1.2

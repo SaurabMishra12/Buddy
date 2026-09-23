@@ -1,0 +1,15 @@
+{
+  "id": "shinji",
+  "name": "Shinji Hirako",
+  "description": "5th Division Captain and Visored leader wielding Sakanade inverted perception and Sakashima Yokoshima Bankai.",
+  "speed": 1.25,
+  "canFly": false,
+  "abilities": [
+    "sakanade",
+    "inverted_world",
+    "hollow_mask",
+    "cheeky_grin",
+    "shunpo"
+  ],
+  "category": "bleach"
+}

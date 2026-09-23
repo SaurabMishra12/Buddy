@@ -1,0 +1,15 @@
+{
+  "id": "yoruichi",
+  "name": "Yoruichi Shihōin",
+  "description": "Flash Goddess and former Onmitsukidō Commander wielding lightning Shunkō and feline agility.",
+  "speed": 1.45,
+  "canFly": false,
+  "abilities": [
+    "shunko",
+    "lightning_dash",
+    "cat_stretch",
+    "playful_taunt",
+    "shunpo"
+  ],
+  "category": "bleach"
+}

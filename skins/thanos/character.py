@@ -46,6 +46,10 @@ class ThanosCharacter(BaseCharacter):
         particle_mgr: ParticleManager,
         audio_mgr: Any
     ) -> bool:
+        if not audio_mgr:
+            from core.audio import audio_manager
+            audio_mgr = audio_manager
+
         if ability_name in ("the_snap", "infinity_snap", "signature"):
             self.is_snapping = True
             self.snap_end_time = time.time() + 1.8

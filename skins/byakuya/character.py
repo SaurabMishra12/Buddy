@@ -44,7 +44,7 @@ class ByakuyaCharacter(BaseCharacter):
                 audio_mgr.play("magic")
             return True
 
-        elif ability_name == "senkei":
+        elif ability_name in ("senkei", "shikai", "power_up"):
             self.substate = "BANKAI_SENKEI"
             self.senkei_blades_active = True
             self.ability_end_time = now + 4.0
@@ -54,12 +54,12 @@ class ByakuyaCharacter(BaseCharacter):
                 audio_mgr.play("magic")
             return True
 
-        elif ability_name == "hakuteiken":
+        elif ability_name in ("gokei", "bankai", "ultimate", "hakuteiken"):
             self.substate = "HAKUTEIKEN"
             self.has_hakuteiken_wings = True
-            self.ability_end_time = now + 3.0
-            particle_mgr.shockwave(self.x, self.y, max_radius=130.0, color=(1.0, 1.0, 1.0), line_width=4.0)
-            particle_mgr.burst_cherry_petals(self.x, self.y, count=24)
+            self.ability_end_time = now + 3.5
+            particle_mgr.shockwave(target_x, target_y, max_radius=130.0, color=(1.0, 0.5, 0.8), line_width=4.0)
+            particle_mgr.burst_cherry_petals(self.x, self.y, count=45)
             if audio_mgr:
                 audio_mgr.play("swoosh")
             return True
@@ -190,20 +190,30 @@ class ByakuyaCharacter(BaseCharacter):
         ctx.restore()
 
     def _draw_senkei_blades(self, ctx: cairo.Context) -> None:
+        """Render Byakuya's Senkei: four rotating rows of solid glowing blades forming a cage."""
         ctx.save()
-        blade_offsets = [(-32, -20), (-24, -30), (0, -36), (24, -30), (32, -20)]
-        for i, (bx, by) in enumerate(blade_offsets):
-            ctx.save()
-            pulse = math.sin(self.anim_time * 4.0 + i) * 2.0
-            ctx.translate(bx, by + pulse)
-            # Glowing pink Senkei blade
-            ctx.set_source_rgba(1.0, 0.65, 0.85, 0.85)
-            ctx.rectangle(-1.2, -14, 2.4, 28)
-            ctx.fill()
-            ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95)
-            ctx.rectangle(-0.5, -12, 1.0, 24)
-            ctx.fill()
-            ctx.restore()
+        rot_base = self.anim_time * 1.5
+        radius_x = 34.0
+        radius_y = 16.0
+        for tier in range(4):
+            tier_y = -36.0 + tier * 14.0
+            tier_rot = rot_base + (tier * 0.45)
+            for b in range(6):
+                ang = tier_rot + b * (math.pi / 3.0)
+                bx = radius_x * math.cos(ang)
+                by = tier_y + radius_y * math.sin(ang)
+                depth = (math.sin(ang) + 1.0) * 0.5
+                b_alpha = 0.45 + 0.55 * depth
+
+                ctx.save()
+                ctx.translate(bx, by)
+                ctx.set_source_rgba(1.0, 0.5, 0.8, 0.85 * b_alpha)
+                ctx.rectangle(-1.2, -7, 2.4, 14)
+                ctx.fill()
+                ctx.set_source_rgba(1.0, 1.0, 1.0, 0.95 * b_alpha)
+                ctx.rectangle(-0.5, -6, 1.0, 12)
+                ctx.fill()
+                ctx.restore()
         ctx.restore()
 
     def _draw_sheathed_katana(self, ctx: cairo.Context) -> None:

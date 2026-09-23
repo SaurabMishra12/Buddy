@@ -59,6 +59,7 @@ pyinstaller \
     --collect-all "skins" \
     --collect-all "platforms" \
     --collect-all "pomodoro" \
+    --collect-all "behavior" \
     --collect-all "core" \
     --collect-all "ui" \
     --hidden-import "AppKit" \

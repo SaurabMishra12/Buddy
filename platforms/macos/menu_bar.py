@@ -15,10 +15,19 @@ class MenuController(NSObject):
     """Primary Objective-C action dispatcher for all menu bar items."""
 
     @objc.IBAction
+    def onControlCenter_(self, sender):
+        if hasattr(self, "_engine") and self._engine:
+            self._engine.open_control_center()
+
+    @objc.IBAction
     def onSwitchSkin_(self, sender):
         if not hasattr(self, "_engine") or not self._engine:
             return
         skin_id = str(sender.representedObject())
+        dev_mode = self._engine.is_developer_mode() if hasattr(self._engine, "is_developer_mode") else self._engine.config.get("developer_mode", False)
+        if skin_manager.is_archived(skin_id) and not dev_mode:
+            print(f"[Menu Bar] Rejected switch to archived character '{skin_id}' because Developer Mode is OFF.")
+            return
         self._engine.switch_skin(skin_id)
         if hasattr(self._engine.window, "queue_draw"):
             self._engine.window.queue_draw()
@@ -194,6 +203,14 @@ class MacOSMenuBar:
         )
         self.title_item.setEnabled_(False)
         menu.addItem_(self.title_item)
+
+        # 1b. Buddy Control Center
+        cc_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+            "🎛️ Buddy Control Center...", "onControlCenter:", ","
+        )
+        cc_item.setTarget_(self.controller)
+        menu.addItem_(cc_item)
+
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
 
         # 2. Companion Behavior Mode
@@ -245,39 +262,53 @@ class MacOSMenuBar:
         self.skin_menu = AppKit.NSMenu.alloc().init()
         self.skin_menu.setAutoenablesItems_(False)
 
-        categories_map = {
-            "bleach": ("⚔️ Bleach Soul Reapers", []),
-            "superhero": ("🦸 Superheroes", []),
-            "animals": ("🐾 Pets & Animals", []),
-            "fantasy": ("🔮 Fantasy & Magic", []),
-            "sci-fi": ("🚀 Sci-Fi & Others", []),
-            "cute": ("✨ Cute Companions", []),
-        }
-        for s in skin_manager.get_available_skins():
-            cat = s.get("category", "superhero").lower()
-            if cat in categories_map:
-                categories_map[cat][1].append(s)
-            else:
-                categories_map["sci-fi"][1].append(s)
-
-        for cat_key, (cat_label, cat_skins) in categories_map.items():
-            if not cat_skins:
-                continue
-            cat_sub_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(cat_label, None, "")
-            cat_menu = AppKit.NSMenu.alloc().init()
-            cat_menu.setAutoenablesItems_(False)
-            for s in cat_skins:
-                sid = s["id"]
-                s_name = s.get("name", sid)
-                flight = " ✈️" if s.get("canFly") else ""
+        dev_mode = self.engine.is_developer_mode() if hasattr(self.engine, "is_developer_mode") else self.engine.config.get("developer_mode", False)
+        if not dev_mode:
+            from skins.manager import ACTIVE_ROSTER
+            for sid in ACTIVE_ROSTER:
+                meta = skin_manager.get_metadata(sid) or {}
+                s_name = meta.get("name", sid.replace("_", " ").title())
+                flight = " ✈️" if meta.get("canFly") else ""
                 it = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(f"{s_name}{flight}", "onSwitchSkin:", "")
                 it.setTarget_(self.controller)
                 it.setRepresentedObject_(sid)
                 if sid == cur_id:
                     it.setState_(AppKit.NSControlStateValueOn)
-                cat_menu.addItem_(it)
-            cat_sub_item.setSubmenu_(cat_menu)
-            self.skin_menu.addItem_(cat_sub_item)
+                self.skin_menu.addItem_(it)
+        else:
+            categories_map = {
+                "bleach": ("⚔️ Bleach Soul Reapers", []),
+                "superhero": ("🦸 Superheroes", []),
+                "animals": ("🐾 Pets & Animals", []),
+                "fantasy": ("🔮 Fantasy & Magic", []),
+                "sci-fi": ("🚀 Sci-Fi & Others", []),
+                "cute": ("✨ Cute Companions", []),
+            }
+            for s in skin_manager.get_available_skins(include_archived=True):
+                cat = s.get("category", "superhero").lower()
+                if cat in categories_map:
+                    categories_map[cat][1].append(s)
+                else:
+                    categories_map["sci-fi"][1].append(s)
+
+            for cat_key, (cat_label, cat_skins) in categories_map.items():
+                if not cat_skins:
+                    continue
+                cat_sub_item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(cat_label, None, "")
+                cat_menu = AppKit.NSMenu.alloc().init()
+                cat_menu.setAutoenablesItems_(False)
+                for s in cat_skins:
+                    sid = s["id"]
+                    s_name = s.get("name", sid)
+                    flight = " ✈️" if s.get("canFly") else ""
+                    it = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(f"{s_name}{flight}", "onSwitchSkin:", "")
+                    it.setTarget_(self.controller)
+                    it.setRepresentedObject_(sid)
+                    if sid == cur_id:
+                        it.setState_(AppKit.NSControlStateValueOn)
+                    cat_menu.addItem_(it)
+                cat_sub_item.setSubmenu_(cat_menu)
+                self.skin_menu.addItem_(cat_sub_item)
 
         self.skin_sub_item.setSubmenu_(self.skin_menu)
         menu.addItem_(self.skin_sub_item)

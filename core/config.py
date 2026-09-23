@@ -46,6 +46,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "movement_area": "current_monitor",  # "current_monitor" or "all_monitors"
     "always_on_top": True,
     "debug_mode": False,
+    "developer_mode": False,
     "start_with_system": False,
     "favorite_skins": ["thor", "dragon", "cat", "dog", "ironman"],
     "screen_shake_enabled": True,

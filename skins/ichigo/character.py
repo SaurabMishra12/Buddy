@@ -33,6 +33,7 @@ class IchigoCharacter(BaseCharacter):
 
         # Cloth & hair sway
         self.cloth_flutter = 0.0
+        self.afterimages = []
 
     def trigger_ability(
         self,
@@ -67,10 +68,29 @@ class IchigoCharacter(BaseCharacter):
         elif ability_name == "shunpo":
             self.shunpo_active = True
             self.shunpo_end_time = now + 0.25
-            particle_mgr.burst_sparks(self.x, self.y, count=12, color=(0.1, 0.1, 0.1))
-            self.x = target_x + random.uniform(-30, 30)
-            self.y = target_y + random.uniform(-20, 20)
-            particle_mgr.burst_reiatsu(self.x, self.y, color=(0.1, 0.6, 1.0), count=8)
+            old_x, old_y = self.x, self.y
+            dest_x = target_x + random.uniform(-25, 25)
+            dest_y = target_y + random.uniform(-15, 15)
+            # Create 2-3 fading afterimage copies at 60-80ms offsets along the dash vector
+            self.afterimages = []
+            for i in range(1, 4):
+                t_frac = i / 4.0
+                delay = i * 0.070  # ~70ms offset
+                img_x = old_x + (dest_x - old_x) * t_frac
+                img_y = old_y + (dest_y - old_y) * t_frac
+                self.afterimages.append({
+                    "x": img_x,
+                    "y": img_y,
+                    "facing_right": self.facing_right,
+                    "is_bankai": self.is_bankai,
+                    "created_at": now,
+                    "offset_delay": delay,
+                    "duration": 0.24,
+                })
+            self.x = dest_x
+            self.y = dest_y
+            particle_mgr.burst_sparks(old_x, old_y, count=10, color=(0.1, 0.1, 0.1))
+            particle_mgr.burst_reiatsu(self.x, self.y, color=(0.8, 0.1, 0.1) if self.is_bankai else (0.1, 0.6, 1.0), count=8)
             if audio_mgr:
                 audio_mgr.play("swoosh")
             return True
@@ -145,7 +165,38 @@ class IchigoCharacter(BaseCharacter):
         if self.is_bankai and random.random() < 0.25:
             particle_mgr.burst_reiatsu(self.x, self.y + 10, color=(0.1, 0.1, 0.15), count=1)
 
+        # Update Shunpo fading afterimages
+        self.afterimages = [
+            img for img in self.afterimages
+            if (now - img["created_at"]) < (img["offset_delay"] + img["duration"])
+        ]
+
     def draw(self, ctx: cairo.Context, particle_mgr: ParticleManager) -> None:
+        now = time.time()
+        # Draw Shunpo fading afterimages (2-3 copies at 60-80ms offsets)
+        for img in self.afterimages:
+            elapsed = now - img["created_at"]
+            if elapsed >= img["offset_delay"]:
+                fade = max(0.0, min(1.0, 1.0 - (elapsed - img["offset_delay"]) / img["duration"]))
+                if fade > 0.02:
+                    ctx.save()
+                    ctx.translate(img["x"], img["y"])
+                    ctx.scale(self.scale, self.scale)
+                    if not img["facing_right"]:
+                        ctx.scale(-1, 1)
+                    if img["is_bankai"]:
+                        ctx.set_source_rgba(0.9, 0.1, 0.15, fade * 0.45)
+                    else:
+                        ctx.set_source_rgba(0.15, 0.65, 1.0, fade * 0.45)
+                    ctx.arc(0, -18, 12, 0, math.pi * 2)
+                    ctx.fill()
+                    ctx.rectangle(-8, -6, 16, 22)
+                    ctx.fill()
+                    ctx.rectangle(-8, 16, 6, 14)
+                    ctx.rectangle(2, 16, 6, 14)
+                    ctx.fill()
+                    ctx.restore()
+
         ctx.save()
         ctx.translate(self.x, self.y)
         ctx.scale(self.scale, self.scale)

@@ -39,5 +39,6 @@ env/
 # Logs & temporary cache
 *.log
 .cache/
+.pytest_cache/
 .tmp/
 scratch/

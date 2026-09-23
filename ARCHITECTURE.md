@@ -1,10 +1,10 @@
-# 🏛️ Buddy 2.0 — Architecture & Developer Guide
+# Buddy 2.0 — Architecture & Developer Guide
 
 Buddy is an animated cross-platform desktop companion and productivity assistant designed to run natively on **Linux** (GNOME, KDE, X11, Wayland) and **macOS** (Apple Silicon and Intel Cocoa/AppKit) with zero shared compromises.
 
 ---
 
-## 🗺️ High-Level System Architecture
+## High-Level System Architecture
 
 ```
                                   ┌───────────────────────────┐
@@ -47,7 +47,7 @@ Buddy is an animated cross-platform desktop companion and productivity assistant
 
 ---
 
-## 🧩 Core Architecture Principles
+## Core Architecture Principles
 
 1. **Procedural Vector Drawing (Cairo-First)**:
    All character animations, poses, physics bodies, and visual effects are drawn via **PyCairo** vector geometry (`cairo.Context`). This guarantees pixel-perfect vector scalability at any display scaling factor without bitmap pixelation.
@@ -60,7 +60,7 @@ Buddy is an animated cross-platform desktop companion and productivity assistant
 
 ---
 
-## 🎨 Companion Skin Architecture (`skins/`)
+## Companion Skin Architecture (`skins/`)
 
 Every character in Buddy is a modular package residing in `skins/<skin_id>/`:
 
@@ -92,7 +92,7 @@ Each companion transitions through formal states defined in [`core/physics.py`](
 
 ---
 
-## 🛠️ How to Build and Add a New Character Companion
+## How to Build and Add a New Character Companion
 
 Adding a new character works identically across **both Linux and macOS**. Because character drawing uses pure procedural Cairo, any companion created runs instantly on both platforms without modification.
 
@@ -261,7 +261,7 @@ Your companion will immediately appear in:
 
 ---
 
-## 🧪 Testing & Verification Matrix
+## Testing & Verification Matrix
 
 | Area | macOS Command | Linux Command |
 | :--- | :--- | :--- |

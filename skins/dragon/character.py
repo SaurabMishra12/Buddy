@@ -88,6 +88,10 @@ class DragonCharacter(BaseCharacter):
         particle_mgr: ParticleManager,
         audio_mgr: Any
     ) -> bool:
+        if not audio_mgr:
+            from core.audio import audio_manager
+            audio_mgr = audio_manager
+
         dir_mult = 1.0 if self.facing_right else -1.0
         mouth_x = self.x + dir_mult * (48.0 if not self.is_seated else 42.0)
         mouth_y = self.y + (14.0 if not self.is_seated else -18.0)
